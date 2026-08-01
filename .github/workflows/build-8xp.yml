@@ -36,6 +36,7 @@ jobs:
         run: |
           set -euxo pipefail
           make clean || true
+          make gfx
           make
           find . -type f -iname '*.8xp' -print
           test -n "$(find . -type f -iname '*.8xp' -print -quit)"
