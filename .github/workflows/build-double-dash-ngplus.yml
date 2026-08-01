@@ -4,170 +4,19 @@ on:
   push:
     branches:
       - assistant/double-dash-new-game-plus
+  pull_request:
+    branches:
+      - master
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  patch-and-build:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out feature branch
+      - name: Check out source
         uses: actions/checkout@v4
-        with:
-          ref: assistant/double-dash-new-game-plus
-
-      - name: Add strawberry-completion New Game+
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path("src/classic.cpp")
-          source = path.read_text(encoding="utf-8-sig")
-
-          if "TOTAL_STRAWBERRIES = 18" not in source:
-              source = source.replace(
-                  "int seconds;\nint minutes;\n",
-                  "int seconds;\nint minutes;\n\nconstexpr int TOTAL_STRAWBERRIES = 18;\n",
-                  1,
-              )
-
-              old_flag = '''void Flag::draw() {
-              sprite = 118 + (frames / 5) % 3;
-              spr(sprite, x, y);
-              if(show) {
-                  rectfill(32, 2, 96, 31, 0);
-                  if(practice_mode) {
-                      int total = practice_get_total_time();
-                      if(total == 0) {
-                          print("incomplete", 44, 16, 7);
-                      } else {
-                          int subsecond = (total % 30) * 10 / 3;
-                          int seconds = total / 30;
-                          int minutes = seconds / (30 * 60);
-                          print_int(minutes, 49, 17, 7, 2);
-                          print(":");
-                          print_int(seconds, 2);
-                          print(".");
-                          print_int(subsecond, 2);
-                      }
-                  } else {
-                      spr(26, 55, 6);
-                      print("x", 64, 9, 7);
-                      print_int(score);
-                      draw_time(49, 16);
-                      print("deaths:", 48, 24, 7);
-                      print_int(deaths);
-                  }
-              } else if(check_player(0, 0)) {
-                  //sfx(55);
-                  sfx_timer = 30;
-                  show = true;
-              }
-          }
-          '''
-
-              new_flag = '''void Flag::draw() {
-              sprite = 118 + (frames / 5) % 3;
-              spr(sprite, x, y);
-              if(show) {
-                  int results_bottom = (!practice_mode && score == TOTAL_STRAWBERRIES) ? 39 : 31;
-                  rectfill(32, 2, 96, results_bottom, 0);
-                  if(practice_mode) {
-                      int total = practice_get_total_time();
-                      if(total == 0) {
-                          print("incomplete", 44, 16, 7);
-                      } else {
-                          int subsecond = (total % 30) * 10 / 3;
-                          int seconds = total / 30;
-                          int minutes = seconds / (30 * 60);
-                          print_int(minutes, 49, 17, 7, 2);
-                          print(":");
-                          print_int(seconds, 2);
-                          print(".");
-                          print_int(subsecond, 2);
-                      }
-                  } else {
-                      spr(26, 55, 6);
-                      print("x", 64, 9, 7);
-                      print_int(score);
-                      draw_time(49, 16);
-                      print("deaths:", 48, 24, 7);
-                      print_int(deaths);
-                      if(score == TOTAL_STRAWBERRIES) {
-                          print("2nd: 2dash", 38, 33, 7);
-                      }
-                  }
-              } else if(check_player(0, 0)) {
-                  //sfx(55);
-                  sfx_timer = 30;
-                  show = true;
-              }
-          }
-
-          bool double_dash_restart_available() {
-              if(practice_mode || level_index() != 30) return false;
-
-              int strawberry_count = 0;
-              for(bool collected : got_fruit) {
-                  if(collected) strawberry_count++;
-              }
-              if(strawberry_count != TOTAL_STRAWBERRIES) return false;
-
-              for(Object *object : objects) {
-                  if(object != nullptr && object->type == FLAG && static_cast<Flag *>(object)->show) {
-                      return true;
-                  }
-              }
-              return false;
-          }
-          '''
-
-              if old_flag not in source:
-                  raise SystemExit("Flag::draw source block did not match")
-              source = source.replace(old_flag, new_flag, 1)
-
-              old_update = '''    // screenshake
-              if(shake > 0) {
-          '''
-              new_update = '''    if(double_dash_restart_available() && btn(k_jump)) {
-              frames = 0;
-              seconds = 0;
-              minutes = 0;
-              deaths = 0;
-              max_djump = 2;
-              new_bg = false;
-              flash_bg = false;
-              music_timer = 0;
-              will_restart = false;
-              delay_restart = 0;
-              pause_player = false;
-              load_room(0, 0);
-              profiler_end(update);
-              return;
-          }
-
-              // screenshake
-              if(shake > 0) {
-          '''
-              if old_update not in source:
-                  raise SystemExit("_update insertion point did not match")
-              source = source.replace(old_update, new_update, 1)
-
-              path.write_text(source, encoding="utf-8")
-              print("Applied double-dash New Game+ source patch")
-          else:
-              print("Source patch already present")
-          PY
-
-          if ! git diff --quiet -- src/classic.cpp; then
-            git config user.name "OpenAI"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add src/classic.cpp
-            git commit -m "Add double-dash New Game+ unlock"
-            git push
-          fi
 
       - name: Install CE toolchain
         shell: bash
