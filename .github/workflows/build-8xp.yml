@@ -1,0 +1,52 @@
+name: Build TI-84 Plus CE 8xp
+
+on:
+  push:
+    branches:
+      - assistant/build-8xp
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install CE toolchain
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 3 \
+            https://github.com/CE-Programming/toolchain/releases/latest/download/CEdev-Linux.tar.gz \
+            -o /tmp/CEdev-Linux.tar.gz
+          mkdir -p "$HOME/cedev"
+          tar -xzf /tmp/CEdev-Linux.tar.gz -C "$HOME/cedev"
+          CEDEV_BIN="$(find "$HOME/cedev" -type d -path '*/CEdev/bin' -print -quit)"
+          test -n "$CEDEV_BIN"
+          echo "$CEDEV_BIN" >> "$GITHUB_PATH"
+
+      - name: Build CEleste
+        shell: bash
+        run: |
+          set -euxo pipefail
+          make clean || true
+          make -j"$(nproc)"
+          find . -type f -iname '*.8xp' -print
+          test -n "$(find . -type f -iname '*.8xp' -print -quit)"
+
+      - name: Collect calculator program
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p artifact
+          find . -type f -iname '*.8xp' -exec cp -v {} artifact/ \;
+
+      - name: Upload 8xp
+        uses: actions/upload-artifact@v4
+        with:
+          name: CEleste-8xp
+          path: artifact/*.8xp
+          if-no-files-found: error
