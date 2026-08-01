@@ -1,4 +1,4 @@
-﻿#include "classic.h"
+#include "classic.h"
 
 #include <TINYSTL/vector.h>
 #include <debug.h>
@@ -53,6 +53,8 @@ bool start_game;
 int start_game_flash;
 int seconds;
 int minutes;
+
+constexpr int TOTAL_STRAWBERRIES = 18;
 
 void _init(FILE *save) {
     for(auto &cloud: clouds) {
@@ -954,7 +956,8 @@ void Flag::draw() {
     sprite = 118 + (frames / 5) % 3;
     spr(sprite, x, y);
     if(show) {
-        rectfill(32, 2, 96, 31, 0);
+        int results_bottom = (!practice_mode && score == TOTAL_STRAWBERRIES) ? 39 : 31;
+        rectfill(32, 2, 96, results_bottom, 0);
         if(practice_mode) {
             int total = practice_get_total_time();
             if(total == 0) {
@@ -976,12 +979,32 @@ void Flag::draw() {
             draw_time(49, 16);
             print("deaths:", 48, 24, 7);
             print_int(deaths);
+            if(score == TOTAL_STRAWBERRIES) {
+                print("2nd: 2dash", 38, 33, 7);
+            }
         }
     } else if(check_player(0, 0)) {
         //sfx(55);
         sfx_timer = 30;
         show = true;
     }
+}
+
+bool double_dash_restart_available() {
+    if(practice_mode || level_index() != 30) return false;
+
+    int strawberry_count = 0;
+    for(bool collected : got_fruit) {
+        if(collected) strawberry_count++;
+    }
+    if(strawberry_count != TOTAL_STRAWBERRIES) return false;
+
+    for(Object *object : objects) {
+        if(object != nullptr && object->type == FLAG && static_cast<Flag *>(object)->show) {
+            return true;
+        }
+    }
+    return false;
 }
 
 RoomTitle::RoomTitle(int x, int y) : Object(x, y) {
@@ -1312,6 +1335,23 @@ void _update() {
         profiler_end(update);
         return;
     }
+
+    if(double_dash_restart_available() && btn(k_jump)) {
+    frames = 0;
+    seconds = 0;
+    minutes = 0;
+    deaths = 0;
+    max_djump = 2;
+    new_bg = false;
+    flash_bg = false;
+    music_timer = 0;
+    will_restart = false;
+    delay_restart = 0;
+    pause_player = false;
+    load_room(0, 0);
+    profiler_end(update);
+    return;
+}
 
     // screenshake
     if(shake > 0) {
