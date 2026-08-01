@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - assistant/build-8xp
+  pull_request:
+    branches:
+      - master
 
 permissions:
   contents: read
