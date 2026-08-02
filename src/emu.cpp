@@ -13,7 +13,6 @@
 #include <cmath>
 
 #include "gfx/gfx.h"
-#include "new_game_plus_plus.h"
 #include "profiler.h"
 #include "practice.h"
 
@@ -219,7 +218,7 @@ gfx_rletsprite_t *render_map(int cell_x, int cell_y, uint8_t layers) {
     gfx_FillRectangle_NoClip(LCD_WIDTH / 2, 0, 128, 128);
     for(int y = 0; y < 16; y++) {
         for(int x = 0; x < 16; x++) {
-            uint8_t tile = mget(x + cell_x, y + cell_y);
+            uint8_t tile = tilemap[x + cell_x + (y + cell_y) * 128];
             // I don't think this is how the PICO-8 actually handles the layers argument but whatevs
             if(tile && fget(tile, layers)) {
                 gfx_TransparentSprite_NoClip(atlas_tiles[tile], LCD_WIDTH / 2 + x * 8, y * 8);
@@ -231,17 +230,6 @@ gfx_rletsprite_t *render_map(int cell_x, int cell_y, uint8_t layers) {
     sprite->height = 128;
     gfx_GetSprite(sprite, LCD_WIDTH / 2, 0);
     return gfx_ConvertMallocRLETSprite(sprite);
-}
-
-uint8_t mget(int x, int y) {
-    if(is_new_game_plus_plus_level()) {
-        return new_game_plus_plus_tile_at(
-                level_index() - NEW_GAME_PLUS_PLUS_FIRST_LEVEL,
-                x - room.x * 16,
-                y - room.y * 16);
-    }
-    if(x < 0 || x >= 128 || y < 0 || y >= 64) return 0;
-    return tilemap[x + y * 128];
 }
 
 void map(int cell_x, int cell_y, int sx, int sy, uint8_t layers) {

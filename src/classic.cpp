@@ -53,9 +53,7 @@ bool start_game;
 int start_game_flash;
 int seconds;
 int minutes;
-GameMode game_mode = NEW_GAME;
-bool third_dash_used = false;
-int third_dash_hint = 0;
+uint8_t new_game_plus = 0;
 
 constexpr int TOTAL_STRAWBERRIES = 18;
 
@@ -93,9 +91,7 @@ void title_screen() {
     frames = 0;
     deaths = 0;
     max_dash = 1;
-    game_mode = NEW_GAME;
-    third_dash_used = false;
-    third_dash_hint = 0;
+    new_game_plus = 0;
     start_game = false;
     start_game_flash = 0;
     //music(40,0,7);
@@ -118,20 +114,7 @@ int level_index() {
 }
 
 bool is_title() {
-    return level_index() == TITLE_LEVEL;
-}
-
-bool is_new_game_plus_plus_level() {
-    int level = level_index();
-    return game_mode == NEW_GAME_PLUS_PLUS &&
-           level >= NEW_GAME_PLUS_PLUS_FIRST_LEVEL &&
-           level <= NEW_GAME_PLUS_PLUS_FINAL_LEVEL;
-}
-
-bool is_run_complete() {
-    return game_mode == NEW_GAME_PLUS_PLUS
-           ? level_index() == NEW_GAME_PLUS_PLUS_FINAL_LEVEL
-           : level_index() == SUMMIT_LEVEL;
+    return level_index() == 31;
 }
 
 // player entity //
@@ -291,9 +274,6 @@ void Player::update() {
 
         if(djump > 0 and dash) {
             new Smoke(x, y);
-            if(max_dash >= 3 and djump == 1) {
-                third_dash_used = true;
-            }
             djump -= 1;
             dash_time = 4;
             has_dashed = true;
@@ -362,15 +342,8 @@ void Player::update() {
     was_on_ground = on_ground;
 
     // next level
-    bool can_advance = level_index() < SUMMIT_LEVEL ||
-                       (is_new_game_plus_plus_level() &&
-                        level_index() < NEW_GAME_PLUS_PLUS_FINAL_LEVEL);
-    if(y < -4 and can_advance) {
-        if(is_new_game_plus_plus_level() and not third_dash_used) {
-            y = -3;
-            spd.y = 0;
-            third_dash_hint = 45;
-        } else if(practice_mode) {
+    if(y < -4 and level_index() < 30) {
+        if(practice_mode) {
             practice_on_complete();
         } else {
             next_room();
@@ -410,15 +383,7 @@ void create_hair(Object *obj) {
 
 void set_hair_color(int djump) {
     // todo: floor?
-    int color = 12;
-    if(djump == 1) {
-        color = 8;
-    } else if(djump == 2) {
-        color = 7 + ((frames / 3) % 2) * 4;
-    } else if(djump >= 3) {
-        color = 10 + (frames / 3) % 2;
-    }
-    pal(8, color);
+    pal(8, (djump == 1 ? 8 : djump == 2 ? (7 + ((frames / 3) % 2) * 4) : 12));
 }
 
 void draw_hair(Object *obj, int facing) {
@@ -673,9 +638,7 @@ void Fruit::update() {
         hit->djump = max_dash;
         sfx_timer = 20;
         //sfx(13);
-        if(level_index() >= 0 and level_index() < NUM_FRUITS) {
-            got_fruit[level_index()] = true;
-        }
+        got_fruit[level_index()] = true;
         new LifeUp(x, y);
         delete this;
     } else {
@@ -723,9 +686,7 @@ void FlyFruit::update() {
         hit->djump = max_dash;
         sfx_timer = 20;
         //sfx(13)
-        if(level_index() >= 0 and level_index() < NUM_FRUITS) {
-            got_fruit[level_index()] = true;
-        }
+        got_fruit[level_index()] = true;
         new LifeUp(x, y);
         delete this;
     }
@@ -940,7 +901,7 @@ void BigChest::draw() {
             chest_particle_count = 0;
             flash_bg = false;
             new_bg = true;
-            new Orb(x + 4, y + 4, is_new_game_plus_plus_level() ? 3 : 2);
+            new Orb(x + 4, y + 4);
             pause_player = false;
         }
         for(int i = 0; i < chest_particle_count; i++) {
@@ -953,11 +914,10 @@ void BigChest::draw() {
     spr(113, x + 8, y + 8);
 }
 
-Orb::Orb(int x, int y, int dash_capacity) : Object(x, y) {
+Orb::Orb(int x, int y) : Object(x, y) {
     spd.y = SP(-4);
     solids = false;
     chest_particle_count = 0;
-    this->dash_capacity = dash_capacity;
 }
 
 void Orb::draw() {
@@ -968,8 +928,8 @@ void Orb::draw() {
         //sfx(51);
         freeze = 10;
         shake = 10;
-        max_dash = dash_capacity;
-        hit->djump = dash_capacity;
+        max_dash = new_game_plus ? 3 : 2;
+        hit->djump = max_dash;
         delete this;
     } else {
         spr(102, x, y);
@@ -993,23 +953,17 @@ Flag::Flag(int x, int y) : Object(x, y) {
     type = FLAG;
 }
 
-const char *completion_prompt(int score) {
-    if(practice_mode || level_index() != SUMMIT_LEVEL) return nullptr;
-    if(game_mode == NEW_GAME && score == TOTAL_STRAWBERRIES) return "2nd: new+";
-    if(game_mode == NEW_GAME_PLUS) return "2nd: new++";
-    if(game_mode == NEW_GAME_PLUS_PLUS) return "2nd: +20";
-    return nullptr;
+bool show_new_game_plus_prompt(int score) {
+    return !practice_mode && !new_game_plus && level_index() == 30 &&
+           score == TOTAL_STRAWBERRIES;
 }
 
 void Flag::draw() {
     sprite = 118 + (frames / 5) % 3;
     spr(sprite, x, y);
     if(show) {
-        const char *prompt = completion_prompt(score);
-        bool new_game_plus_plus_clear = !practice_mode &&
-                                          game_mode == NEW_GAME_PLUS_PLUS &&
-                                          level_index() == NEW_GAME_PLUS_PLUS_FINAL_LEVEL;
-        int results_bottom = (prompt != nullptr || new_game_plus_plus_clear) ? 39 : 31;
+        bool show_prompt = show_new_game_plus_prompt(score);
+        int results_bottom = show_prompt ? 39 : 31;
         rectfill(32, 2, 96, results_bottom, 0);
         if(practice_mode) {
             int total = practice_get_total_time();
@@ -1032,28 +986,22 @@ void Flag::draw() {
             draw_time(49, 16);
             print("deaths:", 48, 24, 7);
             print_int(deaths);
-            if(prompt != nullptr) {
-                print(prompt, 38, 33, 7);
-            } else if(new_game_plus_plus_clear) {
-                print("new++ clear", 40, 33, 7);
+            if(show_prompt) {
+                print("2nd: new+", 38, 33, 7);
             }
         }
     } else if(check_player(0, 0)) {
-        if(is_new_game_plus_plus_level() and not third_dash_used) {
-            third_dash_hint = 45;
-        } else {
-            //sfx(55);
-            sfx_timer = 30;
-            show = true;
-        }
+        //sfx(55);
+        sfx_timer = 30;
+        show = true;
     }
 }
 
-bool completion_action_available() {
-    if(practice_mode || level_index() != SUMMIT_LEVEL) return false;
+bool new_game_plus_available() {
+    if(practice_mode || new_game_plus || level_index() != 30) return false;
     for(Object *object : objects) {
         if(object != nullptr && object->type == FLAG && static_cast<Flag *>(object)->show) {
-            return completion_prompt(static_cast<Flag *>(object)->score) != nullptr;
+            return static_cast<Flag *>(object)->score == TOTAL_STRAWBERRIES;
         }
     }
     return false;
@@ -1071,12 +1019,9 @@ void RoomTitle::draw() {
 
         rectfill(24, 58, 104, 70, 0);
 
-        if(is_new_game_plus_plus_level()) {
-            print("new++", 44, 62, 7);
-            print_int(level_index() - NEW_GAME_PLUS_PLUS_FIRST_LEVEL + 1, 72, 62, 7, 2);
-        } else if(room.x == 3 and room.y == 1) {
+        if(room.x == 3 and room.y == 1) {
             print("old site", 48, 62, 7);
-        } else if(level_index() == SUMMIT_LEVEL) {
+        } else if(level_index() == 30) {
             print("summit", 52, 62, 7);
         } else {
             int level = (1 + level_index()) * 100;
@@ -1095,9 +1040,7 @@ void RoomTitle::draw() {
 ///////////////////////
 
 Object *init_object(type type, int x, int y) {
-    bool has_fruit = level_index() >= 0 and level_index() < NUM_FRUITS
-                     ? got_fruit[level_index()]
-                     : false;
+    bool has_fruit = got_fruit[level_index()];
     switch(type) {
         case PLAYER_SPAWN:
             return new PlayerSpawn(x, y);
@@ -1311,7 +1254,7 @@ void next_room() {
         //music(30,500,7)
     }
 
-    if(level_index() == SUMMIT_LEVEL or is_run_complete()) return;
+    if(level_index() == 30) return;
 
     if(room.x == 7) {
         load_room(0, room.y + 1);
@@ -1333,8 +1276,6 @@ void load_room(uint8_t x, uint8_t y) {
     dbg_printf("loading room %u, %u\n", x, y);
     has_dashed = false;
     has_key = false;
-    third_dash_used = false;
-    third_dash_hint = 0;
 
     //remove existing objects
     while(!objects.empty()) {
@@ -1345,7 +1286,7 @@ void load_room(uint8_t x, uint8_t y) {
     room.x = x;
     room.y = y;
 
-    if(practice_mode && level_index() >= 0 && level_index() < NUM_FRUITS) {
+    if(practice_mode && level_index() != 30) {
         got_fruit[level_index()] = false;
     }
 
@@ -1364,38 +1305,13 @@ void load_room(uint8_t x, uint8_t y) {
     practice_on_load();
 }
 
-void start_new_campaign(GameMode mode) {
-    frames = 0;
-    seconds = 0;
-    minutes = 0;
-    deaths = 0;
-    game_mode = mode;
-    max_dash = mode == NEW_GAME ? 1 : 2;
-    new_bg = false;
-    flash_bg = false;
-    music_timer = 0;
-    will_restart = false;
-    delay_restart = 0;
-    pause_player = false;
-    load_room(0, 0);
-}
-
-void continue_new_game_plus_plus() {
-    new_bg = true;
-    flash_bg = false;
-    pause_player = false;
-    load_room(0, NEW_GAME_PLUS_PLUS_FIRST_LEVEL / 8);
-}
-
 // update function //
 ///////////////////////
 
 void _update() {
     profiler_add(update);
     frames = ((frames + 1) % 30);
-    bool timer_running = !is_title() && level_index() != SUMMIT_LEVEL &&
-                         level_index() != NEW_GAME_PLUS_PLUS_FINAL_LEVEL;
-    if(frames == 0 and timer_running) {
+    if(frames == 0 and level_index() < 30) {
         seconds = ((seconds + 1) % 60);
         if(seconds == 0) {
             minutes += 1;
@@ -1412,10 +1328,6 @@ void _update() {
     if(sfx_timer > 0) {
         sfx_timer -= 1;
     }
-    if(third_dash_hint > 0) {
-        third_dash_hint -= 1;
-    }
-
     // cancel if freeze
     if(freeze > 0) {
         freeze -= 1;
@@ -1423,14 +1335,20 @@ void _update() {
         return;
     }
 
-    if(completion_action_available() && btn(k_jump)) {
-        if(game_mode == NEW_GAME) {
-            start_new_campaign(NEW_GAME_PLUS);
-        } else if(game_mode == NEW_GAME_PLUS) {
-            start_new_campaign(NEW_GAME_PLUS_PLUS);
-        } else {
-            continue_new_game_plus_plus();
-        }
+    if(new_game_plus_available() && btn(k_jump)) {
+        frames = 0;
+        seconds = 0;
+        minutes = 0;
+        deaths = 0;
+        max_dash = 2;
+        new_game_plus = 1;
+        new_bg = false;
+        flash_bg = false;
+        music_timer = 0;
+        will_restart = false;
+        delay_restart = 0;
+        pause_player = false;
+        load_room(0, 0);
         profiler_end(update);
         return;
     }
@@ -1606,12 +1524,7 @@ void _draw() {
         print("john cesarz", 42, 108, 5);
     }
 
-    if(third_dash_hint > 0) {
-        rectfill(31, 116, 97, 124, 0);
-        print("use 3rd dash", 35, 118, 7);
-    }
-
-    if(level_index() == SUMMIT_LEVEL) {
+    if(level_index() == 30) {
         Object *p = nullptr;
         for(auto o: objects) {
             if(o->type == PLAYER) {
@@ -1708,7 +1621,7 @@ bool spikes_at(int x, int y, int w, int h, subpixel xspd, subpixel yspd) {
 }
 
 bool needs_save() {
-    return !is_title() && !is_run_complete();
+    return !is_title() && level_index() != 30;
 }
 
 #define TO_SERIALIZE(F) \
@@ -1722,15 +1635,13 @@ bool needs_save() {
     F(room.x)           \
     F(room.y)           \
     F(practice_mode)    \
-    F(game_mode)        \
+    F(new_game_plus)    \
 
 #define SERIALIZE(var) fread(&(var), sizeof(var), 1, f);
 void load_save(FILE *f) __attribute__ ((optnone)) {
     TO_SERIALIZE(SERIALIZE)
-    if(game_mode > NEW_GAME_PLUS_PLUS) {
-        game_mode = NEW_GAME;
-    }
-    if(level_index() > TITLE_LEVEL && game_mode != NEW_GAME_PLUS_PLUS) {
+    if(new_game_plus > 1) new_game_plus = 1;
+    if(level_index() > 31) {
         title_screen();
         return;
     }
