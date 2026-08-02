@@ -296,7 +296,7 @@ public:
 };
 
 extern vec2i room;
-extern int max_djump;
+extern int max_dash;
 extern GameMode game_mode;
 extern Player *player;
 

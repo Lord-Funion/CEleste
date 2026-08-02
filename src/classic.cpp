@@ -48,7 +48,7 @@ uint8_t k_dash = 5;
 
 int frames;
 int deaths;
-int max_djump;
+int max_dash;
 bool start_game;
 int start_game_flash;
 int seconds;
@@ -92,7 +92,7 @@ void title_screen() {
     }
     frames = 0;
     deaths = 0;
-    max_djump = 1;
+    max_dash = 1;
     game_mode = NEW_GAME;
     third_dash_used = false;
     third_dash_hint = 0;
@@ -143,7 +143,7 @@ Player::Player(int x, int y) : Object(x, y) {
     p_dash = false;
     grace = 0;
     jbuffer = 0;
-    djump = max_djump;
+    djump = max_dash;
     dash_time = 0;
     dash_effect_time = 0;
     dash_target = {.x=0, .y=0};
@@ -200,9 +200,9 @@ void Player::update() {
 
     if(on_ground) {
         grace = 6;
-        if(djump < max_djump) {
+        if(djump < max_dash) {
             //psfx(54);
-            djump = max_djump;
+            djump = max_dash;
         }
     } else if(grace > 0) {
         grace -= 1;
@@ -291,7 +291,7 @@ void Player::update() {
 
         if(djump > 0 and dash) {
             new Smoke(x, y);
-            if(max_djump >= 3 and djump == 1) {
+            if(max_dash >= 3 and djump == 1) {
                 third_dash_used = true;
             }
             djump -= 1;
@@ -484,7 +484,7 @@ void PlayerSpawn::update() {
 }
 
 void PlayerSpawn::draw() {
-    set_hair_color(max_djump);
+    set_hair_color(max_dash);
     draw_hair(this, 1);
     spr(sprite, x, y, 1, 1, flip.x, flip.y);
     unset_hair_color();
@@ -511,7 +511,7 @@ void Spring::update() {
             hit->y = y - 4;
             hit->spd.x /= 5;
             hit->spd.y = SP(-3);
-            hit->djump = max_djump;
+            hit->djump = max_dash;
             delay = 10;
             new Smoke(x, y);
 
@@ -559,10 +559,10 @@ void Balloon::update() {
         offset += UINT24_MAX / 100;
         y = start + sin(offset) * 2 / TRIG_SCALE;
         Player *hit = collide_player(0, 0);
-        if(hit != nullptr and hit->djump < max_djump) {
+        if(hit != nullptr and hit->djump < max_dash) {
             //psfx(6);
             new Smoke(x, y);
-            hit->djump = max_djump;
+            hit->djump = max_dash;
             sprite = 0;
             timer = 60;
         }
@@ -670,7 +670,7 @@ Fruit::Fruit(int x, int y) : Object(x, y) {
 void Fruit::update() {
     Player *hit = collide_player(0, 0);
     if(hit != nullptr) {
-        hit->djump = max_djump;
+        hit->djump = max_dash;
         sfx_timer = 20;
         //sfx(13);
         if(level_index() >= 0 and level_index() < NUM_FRUITS) {
@@ -720,7 +720,7 @@ void FlyFruit::update() {
     // collect
     Player *hit = collide_player(0, 0);
     if(hit != nullptr) {
-        hit->djump = max_djump;
+        hit->djump = max_dash;
         sfx_timer = 20;
         //sfx(13)
         if(level_index() >= 0 and level_index() < NUM_FRUITS) {
@@ -968,7 +968,7 @@ void Orb::draw() {
         //sfx(51);
         freeze = 10;
         shake = 10;
-        max_djump = dash_capacity;
+        max_dash = dash_capacity;
         hit->djump = dash_capacity;
         delete this;
     } else {
@@ -1370,7 +1370,7 @@ void start_new_campaign(GameMode mode) {
     minutes = 0;
     deaths = 0;
     game_mode = mode;
-    max_djump = mode == NEW_GAME ? 1 : 2;
+    max_dash = mode == NEW_GAME ? 1 : 2;
     new_bg = false;
     flash_bg = false;
     music_timer = 0;
@@ -1714,7 +1714,7 @@ bool needs_save() {
 #define TO_SERIALIZE(F) \
     F(frames)           \
     F(deaths)           \
-    F(max_djump)        \
+    F(max_dash)         \
     F(new_bg)           \
     F(seconds)          \
     F(minutes)          \
