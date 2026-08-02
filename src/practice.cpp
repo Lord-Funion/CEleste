@@ -45,7 +45,7 @@ void practice_update() {
     if(kb_IsDown(kb_KeyZoom)) {
         if(!is_title() &&  level_index() > 21) {
             while(kb_IsDown(kb_KeyZoom));
-            max_djump = max_djump == 2 ? 1 : 2;
+            max_dash = max_dash == 2 ? 1 : 2;
             load_room(room.x, room.y);
         }
     }
