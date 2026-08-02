@@ -17,6 +17,18 @@ required for your OS version.
 Use the arrow keys to move, 2nd to jump and alpha to dash. To exit the game, press
 the clear key to save your progress, or del to exit without saving.
 
+### New Game+ and New Game++
+
+Collect all 18 strawberries and finish the summit to unlock New Game+. Press 2nd
+on the results screen to replay the mountain from the beginning with two dashes.
+Finishing that run unlocks New Game++, which begins at the foot of the mountain
+again and continues past the summit into 20 new rooms.
+
+The first new room contains another large chest. Its orb grants a third dash, and
+each of the 20 new rooms requires that third dash before its exit or final flag
+will open. The player's hair flashes yellow and green while all three dashes are
+charged.
+
 A practice mode for speedrunning can be accessed by pressing the graph key from
 the title screen. In this mode, the time for the current room is displayed in white, and
 your best time for the room (in frames) is displayed in yellow. After completing a room,
