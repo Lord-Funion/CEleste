@@ -27,19 +27,6 @@ struct vec2s {
 #define NUM_FRUITS 30
 #define NUM_CLOUDS 16
 
-enum GameMode : uint8_t {
-    NEW_GAME = 0,
-    NEW_GAME_PLUS,
-    NEW_GAME_PLUS_PLUS
-};
-
-constexpr int SUMMIT_LEVEL = 30;
-constexpr int TITLE_LEVEL = 31;
-constexpr int NEW_GAME_PLUS_PLUS_FIRST_LEVEL = 32;
-constexpr int NEW_GAME_PLUS_PLUS_LEVEL_COUNT = 20;
-constexpr int NEW_GAME_PLUS_PLUS_FINAL_LEVEL =
-        NEW_GAME_PLUS_PLUS_FIRST_LEVEL + NEW_GAME_PLUS_PLUS_LEVEL_COUNT - 1;
-
 struct Cloud {
     int x;
     uint8_t y;
@@ -273,9 +260,7 @@ public:
 
 class Orb : public Object {
 public:
-    int dash_capacity;
-
-    Orb(int x, int y, int dash_capacity);
+    Orb(int x, int y);
     void draw() override;
 };
 
@@ -297,7 +282,6 @@ public:
 
 extern vec2i room;
 extern int max_dash;
-extern GameMode game_mode;
 extern Player *player;
 
 void _init(FILE *save);
@@ -308,8 +292,6 @@ void title_screen();
 void begin_game();
 int level_index();
 bool is_title();
-bool is_new_game_plus_plus_level();
-bool is_run_complete();
 void load_room(uint8_t x, uint8_t y);
 void restart_room();
 void next_room();

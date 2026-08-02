@@ -10,7 +10,7 @@ void save_game();
 
 extern const uint8_t tilemap[64 * 128];
 
-uint8_t mget(int x, int y);
+#define mget(x, y) tilemap[(x) + (y) * 128]
 
 void print(const char *str);
 void print(const char *str, int x, int y, uint8_t col);
