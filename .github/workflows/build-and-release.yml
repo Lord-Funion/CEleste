@@ -1,0 +1,84 @@
+name: Build and release CEleste
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install CE toolchain v15.0
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 3 \
+            https://github.com/CE-Programming/toolchain/releases/download/v15.0/CEdev-Linux.tar.gz \
+            -o /tmp/CEdev-Linux.tar.gz
+          mkdir -p "$HOME/cedev"
+          tar -xzf /tmp/CEdev-Linux.tar.gz -C "$HOME/cedev"
+          echo "$HOME/cedev/CEdev/bin" >> "$GITHUB_PATH"
+
+      - name: Compile calculator program
+        shell: bash
+        run: |
+          set -euxo pipefail
+          make gfx
+          make
+          test -s bin/CELESTE.8xp
+
+      - name: Create checksum
+        shell: bash
+        run: sha256sum bin/CELESTE.8xp > bin/CELESTE.8xp.sha256
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CEleste-${{ github.run_number }}
+          path: |
+            bin/CELESTE.8xp
+            bin/CELESTE.8xp.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub release
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          tag="auto-build-${GITHUB_RUN_NUMBER}"
+          title="CEleste automatic build #${GITHUB_RUN_NUMBER}"
+
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" \
+              bin/CELESTE.8xp \
+              bin/CELESTE.8xp.sha256 \
+              --clobber \
+              --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$tag" \
+              bin/CELESTE.8xp \
+              bin/CELESTE.8xp.sha256 \
+              --target "$GITHUB_SHA" \
+              --title "$title" \
+              --generate-notes \
+              --repo "$GITHUB_REPOSITORY"
+          fi
