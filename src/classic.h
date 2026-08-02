@@ -26,6 +26,7 @@ struct vec2s {
 
 #define NUM_FRUITS 30
 #define NUM_CLOUDS 16
+#define HAIR_SEGMENTS 6
 
 struct Cloud {
     int x;
@@ -92,7 +93,7 @@ public:
     struct {int x; int y; int w; int h;} hitbox;
     uint8_t type;
 
-    struct {int x; int y; int size; } hair[5];
+    struct {int x; int y; int size; } hair[HAIR_SEGMENTS];
 
     struct vec2s spd;
     struct vec2s rem;

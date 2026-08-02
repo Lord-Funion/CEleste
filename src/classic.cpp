@@ -54,6 +54,27 @@ int start_game_flash;
 int seconds;
 int minutes;
 uint8_t new_game_plus = 0;
+bool test_mode = false; // Test runs never overwrite normal progress.
+bool unlimited_air_jumps = false; // Session-only: deliberately excluded from saves.
+
+constexpr kb_lkey_t TEST_MODE_SEQUENCE[] = {
+        kb_Key8, kb_KeySin, kb_KeyLog, kb_KeySquare, kb_KeyLn, kb_Key2nd
+};
+constexpr kb_lkey_t UNLIMITED_JUMP_SEQUENCE[] = {
+        kb_KeySto, kb_KeyMath, kb_Key2nd
+};
+constexpr int TEST_MODE_SEQUENCE_FRAMES = 3 * 30;
+constexpr int UNLIMITED_JUMP_SEQUENCE_FRAMES = 2 * 30;
+constexpr int TEST_MODE_NOTICE_FRAMES = 45;
+constexpr int COVENANT_NOTICE_FRAMES = 90;
+
+uint8_t previous_keypad[8] = {};
+int test_mode_sequence_step = 0;
+int test_mode_sequence_timer = 0;
+int unlimited_jump_sequence_step = 0;
+int unlimited_jump_sequence_timer = 0;
+int test_mode_notice_timer = 0;
+int covenant_notice_timer = 0;
 
 constexpr int TOTAL_STRAWBERRIES = 18;
 
@@ -92,6 +113,7 @@ void title_screen() {
     deaths = 0;
     max_dash = 1;
     new_game_plus = 0;
+    test_mode = false;
     start_game = false;
     start_game_flash = 0;
     //music(40,0,7);
@@ -107,6 +129,99 @@ void begin_game() {
     start_game = false;
     //music(0,0,7);
     load_room(0, 0);
+}
+
+void begin_new_game_plus(bool from_test_mode) {
+    frames = 0;
+    seconds = 0;
+    minutes = 0;
+    deaths = 0;
+    max_dash = 2;
+    new_game_plus = 1;
+    test_mode = from_test_mode;
+    new_bg = false;
+    flash_bg = false;
+    music_timer = 0;
+    will_restart = false;
+    delay_restart = 0;
+    pause_player = false;
+    load_room(0, 0);
+}
+
+kb_lkey_t newly_pressed_title_key() {
+    kb_lkey_t pressed_key = 0;
+    bool multiple_keys = false;
+
+    for(uint8_t group = 1; group <= 7; group++) {
+        uint8_t current = kb_Data[group];
+        uint8_t pressed = current & ~previous_keypad[group];
+        previous_keypad[group] = current;
+        for(uint8_t mask = 1; mask != 0; mask <<= 1) {
+            if(pressed & mask) {
+                if(pressed_key != 0) multiple_keys = true;
+                pressed_key = static_cast<kb_lkey_t>((group << 8) | mask);
+            }
+        }
+    }
+
+    return multiple_keys ? UINT16_MAX : pressed_key;
+}
+
+bool advance_title_sequence(kb_lkey_t pressed_key, const kb_lkey_t *sequence,
+                            int sequence_length, int time_limit,
+                            int &step, int &timer) {
+    if(step > 0 && --timer <= 0) {
+        step = 0;
+        timer = 0;
+    }
+
+    if(pressed_key == 0) return false;
+
+    if(pressed_key == sequence[step]) {
+        if(step == 0) timer = time_limit;
+        step += 1;
+        if(step == sequence_length) {
+            step = 0;
+            timer = 0;
+            return true;
+        }
+    } else if(pressed_key == sequence[0]) {
+        step = 1;
+        timer = time_limit;
+    } else {
+        step = 0;
+        timer = 0;
+    }
+
+    return false;
+}
+
+void update_title_sequences() {
+    kb_lkey_t pressed_key = newly_pressed_title_key();
+    if(!is_title()) {
+        test_mode_sequence_step = 0;
+        test_mode_sequence_timer = 0;
+        unlimited_jump_sequence_step = 0;
+        unlimited_jump_sequence_timer = 0;
+        return;
+    }
+
+    if(test_mode_notice_timer > 0) return;
+
+    if(advance_title_sequence(pressed_key, TEST_MODE_SEQUENCE,
+                              sizeof(TEST_MODE_SEQUENCE) / sizeof(TEST_MODE_SEQUENCE[0]),
+                              TEST_MODE_SEQUENCE_FRAMES,
+                              test_mode_sequence_step, test_mode_sequence_timer)) {
+        test_mode_notice_timer = TEST_MODE_NOTICE_FRAMES;
+    }
+
+    if(advance_title_sequence(pressed_key, UNLIMITED_JUMP_SEQUENCE,
+                              sizeof(UNLIMITED_JUMP_SEQUENCE) / sizeof(UNLIMITED_JUMP_SEQUENCE[0]),
+                              UNLIMITED_JUMP_SEQUENCE_FRAMES,
+                              unlimited_jump_sequence_step, unlimited_jump_sequence_timer)) {
+        unlimited_air_jumps = true;
+        covenant_notice_timer = COVENANT_NOTICE_FRAMES;
+    }
 }
 
 int level_index() {
@@ -264,6 +379,10 @@ void Player::update() {
                     if(not is_ice(wall_dir * 3, 0)) {
                         new Smoke(x + wall_dir * 6, y);
                     }
+                } else if(unlimited_air_jumps) {
+                    jbuffer = 0;
+                    spd.y = SP(-2);
+                    new Smoke(x, y + 4);
                 }
             }
         }
@@ -374,7 +493,7 @@ void Player::draw() {
 //}
 
 void create_hair(Object *obj) {
-    for(int i = 0; i <= 4; i++) {
+    for(int i = 0; i < HAIR_SEGMENTS; i++) {
         obj->hair[i].x = SP(obj->x);
         obj->hair[i].y = SP(obj->y);
         obj->hair[i].size = max(1, min(2, 3 - i));
@@ -387,10 +506,13 @@ void set_hair_color(int djump) {
 }
 
 void draw_hair(Object *obj, int facing) {
+    static const uint8_t rainbow_colors[HAIR_SEGMENTS] = {8, 9, 10, 11, 12, 2};
     struct vec2i last = {.x=SP(obj->x + 4 - facing * 2), .y=SP(obj->y + (btn(k_down) ? 4 : 3))};
-    for(int i = 0; i < 5; i++) {
+    int segments = unlimited_air_jumps ? HAIR_SEGMENTS : 5;
+    for(int i = 0; i < segments; i++) {
         obj->hair[i].x += (last.x - obj->hair[i].x) * 2 / 3;
         obj->hair[i].y += ((last.y - obj->hair[i].y) * 2 + 1) / 3;
+        if(unlimited_air_jumps) pal(8, rainbow_colors[i]);
         circfill(PIX(obj->hair[i].x), PIX(obj->hair[i].y), obj->hair[i].size, 8);
         last.x = obj->hair[i].x;
         last.y = obj->hair[i].y;
@@ -1328,6 +1450,22 @@ void _update() {
     if(sfx_timer > 0) {
         sfx_timer -= 1;
     }
+
+    update_title_sequences();
+
+    if(covenant_notice_timer > 0) {
+        covenant_notice_timer -= 1;
+    }
+
+    if(is_title() && test_mode_notice_timer > 0) {
+        test_mode_notice_timer -= 1;
+        if(test_mode_notice_timer == 0) {
+            begin_new_game_plus(true);
+        }
+        profiler_end(update);
+        return;
+    }
+
     // cancel if freeze
     if(freeze > 0) {
         freeze -= 1;
@@ -1336,19 +1474,7 @@ void _update() {
     }
 
     if(new_game_plus_available() && btn(k_jump)) {
-        frames = 0;
-        seconds = 0;
-        minutes = 0;
-        deaths = 0;
-        max_dash = 2;
-        new_game_plus = 1;
-        new_bg = false;
-        flash_bg = false;
-        music_timer = 0;
-        will_restart = false;
-        delay_restart = 0;
-        pause_player = false;
-        load_room(0, 0);
+        begin_new_game_plus(false);
         profiler_end(update);
         return;
     }
@@ -1524,6 +1650,17 @@ void _draw() {
         print("john cesarz", 42, 108, 5);
     }
 
+    if(test_mode_notice_timer > 0) {
+        rectfill(25, 56, 103, 65, 0);
+        print("TEST MODE ENABLED", 29, 58, 11);
+    }
+
+    if(covenant_notice_timer > 0) {
+        rectfill(16, 104, 111, 121, 0);
+        print("The rainbow represents", 20, 107, 7);
+        print("God's covenant promise.", 18, 113, 7);
+    }
+
     if(level_index() == 30) {
         Object *p = nullptr;
         for(auto o: objects) {
@@ -1621,7 +1758,7 @@ bool spikes_at(int x, int y, int w, int h, subpixel xspd, subpixel yspd) {
 }
 
 bool needs_save() {
-    return !is_title() && level_index() != 30;
+    return !test_mode && !is_title() && level_index() != 30;
 }
 
 #define TO_SERIALIZE(F) \
