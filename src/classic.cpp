@@ -55,24 +55,24 @@ int seconds;
 int minutes;
 uint8_t new_game_plus = 0;
 bool test_mode = false; // Test runs never overwrite normal progress.
-bool unlimited_air_jumps = false; // Session-only: deliberately excluded from saves.
+bool unlimited_dashes = false; // Session-only: deliberately excluded from saves.
 
 constexpr kb_lkey_t TEST_MODE_SEQUENCE[] = {
         kb_Key8, kb_KeySin, kb_KeyLog, kb_KeySquare, kb_KeyLn, kb_Key2nd
 };
-constexpr kb_lkey_t UNLIMITED_JUMP_SEQUENCE[] = {
+constexpr kb_lkey_t UNLIMITED_DASH_SEQUENCE[] = {
         kb_KeySto, kb_KeyMath, kb_Key2nd
 };
 constexpr int TEST_MODE_SEQUENCE_FRAMES = 3 * 30;
-constexpr int UNLIMITED_JUMP_SEQUENCE_FRAMES = 2 * 30;
+constexpr int UNLIMITED_DASH_SEQUENCE_FRAMES = 2 * 30;
 constexpr int TEST_MODE_NOTICE_FRAMES = 45;
 constexpr int COVENANT_NOTICE_FRAMES = 90;
 
 uint8_t previous_keypad[8] = {};
 int test_mode_sequence_step = 0;
 int test_mode_sequence_timer = 0;
-int unlimited_jump_sequence_step = 0;
-int unlimited_jump_sequence_timer = 0;
+int unlimited_dash_sequence_step = 0;
+int unlimited_dash_sequence_timer = 0;
 int test_mode_notice_timer = 0;
 int covenant_notice_timer = 0;
 
@@ -201,8 +201,8 @@ void update_title_sequences() {
     if(!is_title()) {
         test_mode_sequence_step = 0;
         test_mode_sequence_timer = 0;
-        unlimited_jump_sequence_step = 0;
-        unlimited_jump_sequence_timer = 0;
+        unlimited_dash_sequence_step = 0;
+        unlimited_dash_sequence_timer = 0;
         return;
     }
 
@@ -215,11 +215,11 @@ void update_title_sequences() {
         test_mode_notice_timer = TEST_MODE_NOTICE_FRAMES;
     }
 
-    if(advance_title_sequence(pressed_key, UNLIMITED_JUMP_SEQUENCE,
-                              sizeof(UNLIMITED_JUMP_SEQUENCE) / sizeof(UNLIMITED_JUMP_SEQUENCE[0]),
-                              UNLIMITED_JUMP_SEQUENCE_FRAMES,
-                              unlimited_jump_sequence_step, unlimited_jump_sequence_timer)) {
-        unlimited_air_jumps = true;
+    if(advance_title_sequence(pressed_key, UNLIMITED_DASH_SEQUENCE,
+                              sizeof(UNLIMITED_DASH_SEQUENCE) / sizeof(UNLIMITED_DASH_SEQUENCE[0]),
+                              UNLIMITED_DASH_SEQUENCE_FRAMES,
+                              unlimited_dash_sequence_step, unlimited_dash_sequence_timer)) {
+        unlimited_dashes = true;
         covenant_notice_timer = COVENANT_NOTICE_FRAMES;
     }
 }
@@ -379,10 +379,6 @@ void Player::update() {
                     if(not is_ice(wall_dir * 3, 0)) {
                         new Smoke(x + wall_dir * 6, y);
                     }
-                } else if(unlimited_air_jumps) {
-                    jbuffer = 0;
-                    spd.y = SP(-2);
-                    new Smoke(x, y + 4);
                 }
             }
         }
@@ -391,9 +387,9 @@ void Player::update() {
         subpixel d_full = SP(5);
         subpixel d_half = SP(5 * 0.70710678118);
 
-        if(djump > 0 and dash) {
+        if((djump > 0 or unlimited_dashes) and dash) {
             new Smoke(x, y);
-            djump -= 1;
+            if(not unlimited_dashes) djump -= 1;
             dash_time = 4;
             has_dashed = true;
             dash_effect_time = 10;
@@ -432,7 +428,7 @@ void Player::update() {
             if(spd.x != 0) {
                 dash_accel.y = SP(15 * 0.70710678118);
             }
-        } else if(dash and djump <= 0) {
+        } else if(dash and djump <= 0 and not unlimited_dashes) {
             //psfx(9);
             new Smoke(x, y);
         }
@@ -508,11 +504,11 @@ void set_hair_color(int djump) {
 void draw_hair(Object *obj, int facing) {
     static const uint8_t rainbow_colors[HAIR_SEGMENTS] = {8, 9, 10, 11, 12, 2};
     struct vec2i last = {.x=SP(obj->x + 4 - facing * 2), .y=SP(obj->y + (btn(k_down) ? 4 : 3))};
-    int segments = unlimited_air_jumps ? HAIR_SEGMENTS : 5;
+    int segments = unlimited_dashes ? HAIR_SEGMENTS : 5;
     for(int i = 0; i < segments; i++) {
         obj->hair[i].x += (last.x - obj->hair[i].x) * 2 / 3;
         obj->hair[i].y += ((last.y - obj->hair[i].y) * 2 + 1) / 3;
-        if(unlimited_air_jumps) pal(8, rainbow_colors[i]);
+        if(unlimited_dashes) pal(8, rainbow_colors[i]);
         circfill(PIX(obj->hair[i].x), PIX(obj->hair[i].y), obj->hair[i].size, 8);
         last.x = obj->hair[i].x;
         last.y = obj->hair[i].y;
