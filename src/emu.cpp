@@ -15,6 +15,7 @@
 #include "gfx/gfx.h"
 #include "profiler.h"
 #include "practice.h"
+#include "custom_levels.h"
 
 #define BASE_X ((LCD_WIDTH - 128 * 2) / 4)
 #define BASE_Y ((LCD_HEIGHT - 128 * 2) / 4)
@@ -26,6 +27,16 @@
 #define FRAME_TIMER 0
 
 #define SAVE_NAME "CelesteS"
+
+uint8_t mget(int x, int y) {
+    if(custom_levels::active()) {
+        if(x < 0 || y < 0) return 0;
+        const uint8_t room_index = static_cast<uint8_t>((x / 16) + (y / 16) * 8);
+        return custom_levels::tile(room_index, static_cast<uint8_t>(x % 16), static_cast<uint8_t>(y % 16));
+    }
+    if(x < 0 || x >= 128 || y < 0 || y >= 64) return 0;
+    return tilemap[x + y * 128];
+}
 
 static struct {
     int x;
@@ -218,7 +229,7 @@ gfx_rletsprite_t *render_map(int cell_x, int cell_y, uint8_t layers) {
     gfx_FillRectangle_NoClip(LCD_WIDTH / 2, 0, 128, 128);
     for(int y = 0; y < 16; y++) {
         for(int x = 0; x < 16; x++) {
-            uint8_t tile = tilemap[x + cell_x + (y + cell_y) * 128];
+            uint8_t tile = mget(x + cell_x, y + cell_y);
             // I don't think this is how the PICO-8 actually handles the layers argument but whatevs
             if(tile && fget(tile, layers)) {
                 gfx_TransparentSprite_NoClip(atlas_tiles[tile], LCD_WIDTH / 2 + x * 8, y * 8);
@@ -237,12 +248,15 @@ void map(int cell_x, int cell_y, int sx, int sy, uint8_t layers) {
     static struct {
         int x;
         int y;
+        uint16_t generation;
         gfx_rletsprite_t *sprite;
     } cache[3] = {};
     auto entry = &cache[layers - 1];
-    if(entry->x != cell_x || entry->y != cell_y || !entry->sprite) {
+    const uint16_t generation = custom_levels::generation();
+    if(entry->x != cell_x || entry->y != cell_y || entry->generation != generation || !entry->sprite) {
         entry->x = cell_x;
         entry->y = cell_y;
+        entry->generation = generation;
         free(entry->sprite);
         entry->sprite = render_map(cell_x, cell_y, layers);
     }
