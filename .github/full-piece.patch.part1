@@ -1,0 +1,150 @@
+--- a/src/custom_levels.h
++++ b/src/custom_levels.h
+@@ -34,6 +34,8 @@
+ uint16_t pack_level_index();
+ uint16_t generation();
+ uint8_t tile(uint8_t room, uint8_t x, uint8_t y);
++bool fruit_collected(uint8_t room);
++void collect_fruit(uint8_t room);
+ const char *last_error();
+ 
+ } // namespace custom_levels
+--- a/src/custom_levels.cpp
++++ b/src/custom_levels.cpp
+@@ -13,6 +13,7 @@
+ uint8_t active_catalog = 0;
+ uint16_t active_pack_level = 0;
+ uint16_t content_generation = 1;
++bool collected_fruit[clevel::MAX_ROOMS]{};
+ char error_text[64] = "";
+ 
+ void set_error(const char *text) {
+@@ -38,7 +39,7 @@
+ }
+ }
+ 
+-void initialize() { count = 0; is_active = false; current_room = 0; active_catalog = 0; active_pack_level = 0; content_generation = 1; error_text[0] = '\0'; }
++void initialize() { count = 0; is_active = false; current_room = 0; active_catalog = 0; active_pack_level = 0; content_generation = 1; std::memset(collected_fruit, 0, sizeof collected_fruit); error_text[0] = '\0'; }
+ 
+ uint8_t scan() {
+     count = 0; void *vat = nullptr; char *name;
+@@ -64,6 +65,7 @@
+     ti_Close(handle);
+     if (!ok) { set_error(clevel::error_string(error)); is_active = false; return false; }
+     current_room = 0; active_catalog = catalog_index; active_pack_level = pack_level_index; is_active = true;
++    std::memset(collected_fruit, 0, sizeof collected_fruit);
+     ++content_generation; if (!content_generation) content_generation = 1;
+     error_text[0] = '\0'; return true;
+ }
+@@ -87,12 +89,12 @@
+ 
+ uint8_t tile(uint8_t room, uint8_t x, uint8_t y) {
+     if (!is_active || room >= loaded.room_count || x >= 16 || y >= 16) return 0;
+-    const clevel::Room &r = loaded.rooms[room];
+-    if (x == r.spawn_x && y == r.spawn_y) return 1;
+-    for (uint8_t i = 0; i < r.entity_count; ++i) if (r.entities[i].x == x && r.entities[i].y == y) return r.entities[i].type;
+-    return r.tiles[y * 16 + x];
++    return loaded.rooms[room].tiles[y * 16 + x];
+ }
+ 
++bool fruit_collected(uint8_t room) { return is_active && room < loaded.room_count && collected_fruit[room]; }
++void collect_fruit(uint8_t room) { if (is_active && room < loaded.room_count) collected_fruit[room] = true; }
++
+ const char *last_error() { return error_text; }
+ 
+ } // namespace custom_levels
+--- a/src/classic.h
++++ b/src/classic.h
+@@ -92,6 +92,7 @@
+     int y;
+     struct {int x; int y; int w; int h;} hitbox;
+     uint8_t type;
++    uint8_t custom_flags;
+ 
+     struct {int x; int y; int size; } hair[HAIR_SEGMENTS];
+ 
+@@ -261,7 +262,8 @@
+ 
+ class Orb : public Object {
+ public:
+-    Orb(int x, int y);
++    Orb(int x, int y, uint8_t target_dashes = 0);
++    uint8_t target_dashes;
+     void draw() override;
+ };
+ 
+@@ -301,7 +303,7 @@
+ void set_hair_color(int djump);
+ void draw_hair(Object *obj, int facing);
+ void unset_hair_color();
+-Object *init_object(enum type type, int x, int y);
++Object *init_object(enum type type, int x, int y, uint8_t flags = 0);
+ void destroy_object(Object *obj);
+ void draw_time(int x, int y);
+ bool solid_at(int x, int y, int w, int h);
+--- a/src/classic.cpp
++++ b/src/classic.cpp
+@@ -761,7 +761,8 @@
+         hit->djump = max_dash;
+         sfx_timer = 20;
+         //sfx(13);
+-        got_fruit[level_index()] = true;
++        if(custom_levels::active()) custom_levels::collect_fruit(custom_levels::room_index());
++        else got_fruit[level_index()] = true;
+         new LifeUp(x, y);
+         delete this;
+     } else {
+@@ -809,7 +810,8 @@
+         hit->djump = max_dash;
+         sfx_timer = 20;
+         //sfx(13)
+-        got_fruit[level_index()] = true;
++        if(custom_levels::active()) custom_levels::collect_fruit(custom_levels::room_index());
++        else got_fruit[level_index()] = true;
+         new LifeUp(x, y);
+         delete this;
+     }
+@@ -868,7 +870,9 @@
+         new Smoke(x + 8, y);
+         new Smoke(x, y + 8);
+         new Smoke(x + 8, y + 8);
+-        new Fruit(x + 4, y + 4);
++        // CELV entity flag bit 0 makes a fake wall empty. Flags=0 keeps
++        // original Celeste Classic behavior: a strawberry is hidden inside.
++        if((custom_flags & 0x01u) == 0) new Fruit(x + 4, y + 4);
+         delete this;
+     }
+     hitbox = {.x=0, .y=0, .w=16, .h=16};
+@@ -917,7 +921,9 @@
+         if(timer <= 0) {
+             sfx_timer = 20;
+             //sfx(16);
+-            new Fruit(x, y - 4);
++            // CELV entity flag bit 0 makes a locked chest empty. Flags=0
++            // preserves the original key -> chest -> strawberry puzzle.
++            if((custom_flags & 0x01u) == 0) new Fruit(x, y - 4);
+             delete this;
+         }
+     }
+@@ -959,6 +965,16 @@
+ }
+ 
+ void Message::draw() {
++    // In the original cartridge the memorial artwork is four map sprites
++    // (70/71 over 86/87). Custom levels store the message as one logical
++    // entity, so draw the complete sign here instead of requiring authors
++    // to assemble companion sprite fragments by hand.
++    if(custom_levels::active()) {
++        spr(70, x, y - 8);
++        spr(71, x + 8, y - 8);
++        spr(86, x, y);
++        spr(87, x + 8, y);
++    }
+     const char *text = "-- celeste mountain --#this memorial to those# perished on the climb";
+     if(check_player(4, 0)) {
+         if(index / 2 < strlen(text)) {
+@@ -1024,7 +1040,12 @@
+             chest_particle_count = 0;
+             flash_bg = false;
+             new_bg = true;
+-            new Orb(x + 4, y + 4);
