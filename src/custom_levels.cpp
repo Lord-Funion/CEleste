@@ -14,7 +14,7 @@ uint8_t active_catalog = 0;
 uint16_t active_pack_level = 0;
 uint16_t content_generation = 1;
 bool collected_fruit[clevel::MAX_ROOMS]{}; // legacy v1 tile-plane compatibility
-constexpr uint8_t SOURCE_BYTES = (clevel::MAX_ENTITIES + 7) / 8;
+constexpr uint8_t SOURCE_BYTES = (clevel::MAX_ENTITIES_PER_ROOM + 7) / 8;
 uint8_t collected_sources[clevel::MAX_ROOMS][SOURCE_BYTES]{};
 char error_text[64] = "";
 
@@ -100,13 +100,13 @@ void collect_fruit(uint8_t room) { if (is_active && room < loaded.room_count) co
 
 bool source_collected(uint8_t room, uint8_t source) {
     if (!is_active || room >= loaded.room_count) return false;
-    if (source >= clevel::MAX_ENTITIES) return collected_fruit[room];
+    if (source >= clevel::MAX_ENTITIES_PER_ROOM) return collected_fruit[room];
     return (collected_sources[room][source >> 3] & static_cast<uint8_t>(1u << (source & 7))) != 0;
 }
 
 void collect_source(uint8_t room, uint8_t source) {
     if (!is_active || room >= loaded.room_count) return;
-    if (source >= clevel::MAX_ENTITIES) { collected_fruit[room] = true; return; }
+    if (source >= clevel::MAX_ENTITIES_PER_ROOM) { collected_fruit[room] = true; return; }
     collected_sources[room][source >> 3] |= static_cast<uint8_t>(1u << (source & 7));
 }
 
