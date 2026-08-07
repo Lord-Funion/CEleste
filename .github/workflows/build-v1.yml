@@ -1,0 +1,82 @@
+name: Build CEleste v1
+
+on:
+  pull_request:
+  push:
+    branches: [agent/custom-level-editor]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ti84ce:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install CEdev v15.0
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -fL --retry 5 --retry-delay 2 \
+            https://github.com/CE-Programming/toolchain/releases/download/v15.0/CEdev-Linux.tar.gz \
+            -o /tmp/CEdev-Linux.tar.gz
+          mkdir -p "$HOME/cedev-dist"
+          tar -xzf /tmp/CEdev-Linux.tar.gz -C "$HOME/cedev-dist"
+          CEDEV_CONFIG="$(find "$HOME/cedev-dist" -type f -name cedev-config -print -quit)"
+          test -n "$CEDEV_CONFIG"
+          chmod +x "$CEDEV_CONFIG"
+          CEDEV_BIN="$(dirname "$CEDEV_CONFIG")"
+          CEDEV_ROOT="$(cd "$CEDEV_BIN/.." && pwd)"
+          echo "$CEDEV_BIN" >> "$GITHUB_PATH"
+          echo "CEDEV=$CEDEV_ROOT" >> "$GITHUB_ENV"
+          "$CEDEV_CONFIG" --makefile >/dev/null
+
+      - name: Verify committed custom-level integration
+        run: |
+          set -euxo pipefail
+          python3 patches/apply_runtime_integration.py
+          git diff --exit-code -- src/classic.cpp src/emu.cpp src/emu.h
+          g++ -std=c++17 -Wall -Wextra -Werror -Isrc -c src/clevel_format.cpp -o /tmp/clevel_format.o
+
+      - name: Generate CEleste graphics
+        run: |
+          set -euxo pipefail
+          make gfx
+          test -s src/gfx/atlas.h
+          test -s src/gfx/atlas.c
+          test -s src/gfx/gfx.h
+
+      - name: Build CEleste
+        run: |
+          set -euxo pipefail
+          make -j2
+          test -s bin/CELESTE.8xp
+
+      - name: Build CELEDIT
+        working-directory: tools/calculator-editor
+        run: |
+          set -euxo pipefail
+          make clean || true
+          make -j2
+          test -s bin/CELEDIT.8xp
+
+      - name: Prepare v1.0.0 binaries
+        run: |
+          set -euxo pipefail
+          mkdir -p release
+          cp bin/CELESTE.8xp release/CEleste-v1.0.0.8xp
+          cp tools/calculator-editor/bin/CELEDIT.8xp release/CELEDIT-v1.0.0.8xp
+          (cd release && sha256sum *.8xp > SHA256SUMS.txt)
+          cat release/SHA256SUMS.txt
+          ls -lh release
+
+      - name: Upload v1.0.0 calculator binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: CEleste-v1.0.0-TI84CE
+          path: release/
+          if-no-files-found: error
+          retention-days: 90

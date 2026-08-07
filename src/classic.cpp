@@ -8,6 +8,8 @@
 #include "emu.h"
 #include "profiler.h"
 #include "practice.h"
+#include "custom_levels.h"
+#include "custom_level_menu.h"
 
 // ~celeste~
 // maddy thorson + noel berry
@@ -79,6 +81,8 @@ int covenant_notice_timer = 0;
 constexpr int TOTAL_STRAWBERRIES = 18;
 
 void _init(FILE *save) {
+    custom_levels::initialize();
+    custom_level_menu::initialize();
     for(auto &cloud: clouds) {
         cloud.x = rnd(128);
         cloud.y = rnd(128);
@@ -106,6 +110,7 @@ void _init(FILE *save) {
 }
 
 void title_screen() {
+    custom_levels::unload();
     for(bool &i: got_fruit) {
         i = false;
     }
@@ -229,7 +234,7 @@ int level_index() {
 }
 
 bool is_title() {
-    return level_index() == 31;
+    return !custom_levels::active() && level_index() == 31;
 }
 
 // player entity //
@@ -457,7 +462,7 @@ void Player::update() {
     was_on_ground = on_ground;
 
     // next level
-    if(y < -4 and level_index() < 30) {
+    if(y < -4 and (custom_levels::active() or level_index() < 30)) {
         if(practice_mode) {
             practice_on_complete();
         } else {
@@ -1072,7 +1077,7 @@ Flag::Flag(int x, int y) : Object(x, y) {
 }
 
 bool show_new_game_plus_prompt(int score) {
-    return !practice_mode && !new_game_plus && level_index() == 30 &&
+    return !custom_levels::active() && !practice_mode && !new_game_plus && level_index() == 30 &&
            score == TOTAL_STRAWBERRIES;
 }
 
@@ -1116,7 +1121,7 @@ void Flag::draw() {
 }
 
 bool new_game_plus_available() {
-    if(practice_mode || new_game_plus || level_index() != 30) return false;
+    if(custom_levels::active() || practice_mode || new_game_plus || level_index() != 30) return false;
     for(Object *object : objects) {
         if(object != nullptr && object->type == FLAG && static_cast<Flag *>(object)->show) {
             return static_cast<Flag *>(object)->score == TOTAL_STRAWBERRIES;
@@ -1158,7 +1163,7 @@ void RoomTitle::draw() {
 ///////////////////////
 
 Object *init_object(type type, int x, int y) {
-    bool has_fruit = got_fruit[level_index()];
+    bool has_fruit = custom_levels::active() ? false : got_fruit[level_index()];
     switch(type) {
         case PLAYER_SPAWN:
             return new PlayerSpawn(x, y);
@@ -1362,6 +1367,17 @@ void restart_room() {
 
 
 void next_room() {
+    if(custom_levels::active()) {
+        if(custom_levels::next_room()) {
+            const uint8_t index = custom_levels::room_index();
+            load_room(index % 8, index / 8);
+        } else if(custom_levels::next_level()) {
+            load_room(0, 0);
+        } else {
+            title_screen();
+        }
+        return;
+    }
     if(room.x == 2 and room.y == 1) {
         //music(30,500,7)
     } else if(room.x == 3 and room.y == 1) {
@@ -1382,6 +1398,13 @@ void next_room() {
 }
 
 void prev_room() {
+    if(custom_levels::active()) {
+        if(custom_levels::previous_room()) {
+            const uint8_t index = custom_levels::room_index();
+            load_room(index % 8, index / 8);
+        }
+        return;
+    }
     if(level_index() < 1) return;
     if(room.x == 0) {
         load_room(7, room.y - 1);
@@ -1404,7 +1427,7 @@ void load_room(uint8_t x, uint8_t y) {
     room.x = x;
     room.y = y;
 
-    if(practice_mode && level_index() != 30) {
+    if(!custom_levels::active() && practice_mode && level_index() != 30) {
         got_fruit[level_index()] = false;
     }
 
@@ -1429,7 +1452,7 @@ void load_room(uint8_t x, uint8_t y) {
 void _update() {
     profiler_add(update);
     frames = ((frames + 1) % 30);
-    if(frames == 0 and level_index() < 30) {
+    if(frames == 0 and (custom_levels::active() or level_index() < 30)) {
         seconds = ((seconds + 1) % 60);
         if(seconds == 0) {
             minutes += 1;
@@ -1448,6 +1471,11 @@ void _update() {
     }
 
     update_title_sequences();
+
+    if(custom_level_menu::update()) {
+        profiler_end(update);
+        return;
+    }
 
     if(covenant_notice_timer > 0) {
         covenant_notice_timer -= 1;
@@ -1671,6 +1699,7 @@ void _draw() {
             rectfill(128 - diff, 0, 128, 128, 0);
         }
     }
+    custom_level_menu::draw();
     profiler_end(draw);
 }
 
@@ -1754,7 +1783,7 @@ bool spikes_at(int x, int y, int w, int h, subpixel xspd, subpixel yspd) {
 }
 
 bool needs_save() {
-    return !test_mode && !is_title() && level_index() != 30;
+    return !custom_levels::active() && !test_mode && !is_title() && level_index() != 30;
 }
 
 #define TO_SERIALIZE(F) \
