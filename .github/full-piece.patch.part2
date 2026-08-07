@@ -1,0 +1,150 @@
++            // Custom big chests can opt into a three-dash upgrade with
++            // entity flag bit 1; ordinary/custom flags=0 gives two dashes.
++            const uint8_t target = custom_levels::active()
++                ? ((custom_flags & 0x02u) ? 3 : 2)
++                : (new_game_plus ? 3 : 2);
++            new Orb(x + 4, y + 4, target);
+             pause_player = false;
+         }
+         for(int i = 0; i < chest_particle_count; i++) {
+@@ -1037,10 +1058,11 @@
+     spr(113, x + 8, y + 8);
+ }
+ 
+-Orb::Orb(int x, int y) : Object(x, y) {
++Orb::Orb(int x, int y, uint8_t target_dashes) : Object(x, y) {
+     spd.y = SP(-4);
+     solids = false;
+     chest_particle_count = 0;
++    this->target_dashes = target_dashes ? target_dashes : (new_game_plus ? 3 : 2);
+ }
+ 
+ void Orb::draw() {
+@@ -1051,7 +1073,7 @@
+         //sfx(51);
+         freeze = 10;
+         shake = 10;
+-        max_dash = new_game_plus ? 3 : 2;
++        max_dash = target_dashes;
+         hit->djump = max_dash;
+         delete this;
+     } else {
+@@ -1162,42 +1184,31 @@
+ // object functions //
+ ///////////////////////
+ 
+-Object *init_object(type type, int x, int y) {
+-    bool has_fruit = custom_levels::active() ? false : got_fruit[level_index()];
++Object *init_object(type type, int x, int y, uint8_t flags) {
++    bool has_fruit = custom_levels::active()
++        ? custom_levels::fruit_collected(custom_levels::room_index())
++        : got_fruit[level_index()];
++    Object *object = nullptr;
+     switch(type) {
+-        case PLAYER_SPAWN:
+-            return new PlayerSpawn(x, y);
+-        case SPRING:
+-            return new Spring(x, y);
+-        case BALLOON:
+-            return new Balloon(x, y);
+-        case FALL_FLOOR:
+-            return new FallFloor(x, y);
+-        case SMOKE:
+-            return new Smoke(x, y);
+-        case FRUIT:
+-            return has_fruit ? nullptr : new Fruit(x, y);
+-        case FLY_FRUIT:
+-            return has_fruit ? nullptr : new FlyFruit(x, y);
+-        case FAKE_WALL:
+-            return has_fruit ? nullptr : new FakeWall(x, y);
+-        case KEY:
+-            return has_fruit ? nullptr : new Key(x, y);
+-        case CHEST:
+-            return has_fruit ? nullptr : new Chest(x, y);
+-        case PLATFORM:
+-            return new Platform(x, y, -1);
+-        case PLATFORM_RIGHT:
+-            return new Platform(x, y, 1);
+-        case MESSAGE:
+-            return new Message(x, y);
+-        case BIG_CHEST:
+-            return new BigChest(x, y);
+-        case FLAG:
+-            return new Flag(x, y);
+-        default:
+-            return nullptr;
++        case PLAYER_SPAWN: object = new PlayerSpawn(x, y); break;
++        case SPRING: object = new Spring(x, y); break;
++        case BALLOON: object = new Balloon(x, y); break;
++        case FALL_FLOOR: object = new FallFloor(x, y); break;
++        case SMOKE: object = new Smoke(x, y); break;
++        case FRUIT: object = has_fruit ? nullptr : new Fruit(x, y); break;
++        case FLY_FRUIT: object = has_fruit ? nullptr : new FlyFruit(x, y); break;
++        case FAKE_WALL: object = has_fruit ? nullptr : new FakeWall(x, y); break;
++        case KEY: object = has_fruit ? nullptr : new Key(x, y); break;
++        case CHEST: object = has_fruit ? nullptr : new Chest(x, y); break;
++        case PLATFORM: object = new Platform(x, y, -1); break;
++        case PLATFORM_RIGHT: object = new Platform(x, y, 1); break;
++        case MESSAGE: object = new Message(x, y); break;
++        case BIG_CHEST: object = new BigChest(x, y); break;
++        case FLAG: object = new Flag(x, y); break;
++        default: return nullptr;
+     }
++    if(object) object->custom_flags = flags;
++    return object;
+ }
+ 
+ Object::Object(int x, int y) {
+@@ -1210,6 +1221,7 @@
+     this->x = x;
+     this->y = y;
+     hitbox = {.x=0, .y=0, .w=8, .h=8};
++    custom_flags = 0;
+ 
+     spd = {.x=0, .y=0};
+     rem = {.x=0, .y=0};
+@@ -1432,10 +1444,34 @@
+     }
+ 
+     // entities
+-    for(uint8_t tx = 0; tx <= 15; tx++) {
+-        for(uint8_t ty = 0; ty <= 15; ty++) {
+-            uint8_t tile = mget(room.x * 16 + tx, room.y * 16 + ty);
+-            init_object((type) (tile), tx * 8, ty * 8);
++    if(custom_levels::active()) {
++        const clevel::Level *level = custom_levels::level();
++        const uint8_t ri = custom_levels::room_index();
++        if(level && ri < level->room_count) {
++            const clevel::Room &custom_room = level->rooms[ri];
++            init_object(PLAYER_SPAWN, custom_room.spawn_x * 8, custom_room.spawn_y * 8);
++            for(uint8_t i = 0; i < custom_room.entity_count; ++i) {
++                const clevel::Entity &entity = custom_room.entities[i];
++                init_object((type)entity.type, entity.x * 8, entity.y * 8, entity.flags);
++            }
++            // Backward compatibility with early CELV v1 writers that also
++            // left entity IDs in the RLE tile plane. Only instantiate one if
++            // no explicit entity record occupies that coordinate.
++            for(uint8_t ty = 0; ty < 16; ++ty) for(uint8_t tx = 0; tx < 16; ++tx) {
++                const uint8_t raw = custom_room.tiles[ty * 16 + tx];
++                bool recorded = false;
++                for(uint8_t i = 0; i < custom_room.entity_count; ++i) {
++                    if(custom_room.entities[i].x == tx && custom_room.entities[i].y == ty) { recorded = true; break; }
++                }
++                if(!recorded) init_object((type)raw, tx * 8, ty * 8);
++            }
++        }
++    } else {
++        for(uint8_t tx = 0; tx <= 15; tx++) {
++            for(uint8_t ty = 0; ty <= 15; ty++) {
++                uint8_t tile = mget(room.x * 16 + tx, room.y * 16 + ty);
++                init_object((type) (tile), tx * 8, ty * 8);
++            }
+         }
+     }
+ 
+--- a/tools/calculator-editor/src/main.cpp
++++ b/tools/calculator-editor/src/main.cpp
+@@ -12,7 +12,25 @@
+ namespace {
+ constexpr uint8_t MAX_ROOMS = 8;
+ constexpr uint8_t HISTORY_SIZE = 64;
