@@ -93,6 +93,7 @@ public:
     struct {int x; int y; int w; int h;} hitbox;
     uint8_t type;
     uint8_t custom_flags;
+    uint8_t custom_source;
 
     struct {int x; int y; int size; } hair[HAIR_SEGMENTS];
 
@@ -303,7 +304,7 @@ void create_hair(Object *obj);
 void set_hair_color(int djump);
 void draw_hair(Object *obj, int facing);
 void unset_hair_color();
-Object *init_object(enum type type, int x, int y, uint8_t flags = 0);
+Object *init_object(enum type type, int x, int y, uint8_t flags = 0, uint8_t source = 0xFF);
 void destroy_object(Object *obj);
 void draw_time(int x, int y);
 bool solid_at(int x, int y, int w, int h);
