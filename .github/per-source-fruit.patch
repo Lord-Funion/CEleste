@@ -1,0 +1,205 @@
+--- a/src/custom_levels.h
++++ b/src/custom_levels.h
+@@ -36,6 +36,9 @@
+ uint8_t tile(uint8_t room, uint8_t x, uint8_t y);
+ bool fruit_collected(uint8_t room);
+ void collect_fruit(uint8_t room);
++bool source_collected(uint8_t room, uint8_t source);
++void collect_source(uint8_t room, uint8_t source);
++bool key_needed(uint8_t room);
+ const char *last_error();
+ 
+ } // namespace custom_levels
+--- a/src/custom_levels.cpp
++++ b/src/custom_levels.cpp
+@@ -13,7 +13,9 @@
+ uint8_t active_catalog = 0;
+ uint16_t active_pack_level = 0;
+ uint16_t content_generation = 1;
+-bool collected_fruit[clevel::MAX_ROOMS]{};
++bool collected_fruit[clevel::MAX_ROOMS]{}; // legacy v1 tile-plane compatibility
++constexpr uint8_t SOURCE_BYTES = (clevel::MAX_ENTITIES + 7) / 8;
++uint8_t collected_sources[clevel::MAX_ROOMS][SOURCE_BYTES]{};
+ char error_text[64] = "";
+ 
+ void set_error(const char *text) {
+@@ -39,7 +41,7 @@
+ }
+ }
+ 
+-void initialize() { count = 0; is_active = false; current_room = 0; active_catalog = 0; active_pack_level = 0; content_generation = 1; std::memset(collected_fruit, 0, sizeof collected_fruit); error_text[0] = '\0'; }
++void initialize() { count = 0; is_active = false; current_room = 0; active_catalog = 0; active_pack_level = 0; content_generation = 1; std::memset(collected_fruit, 0, sizeof collected_fruit); std::memset(collected_sources, 0, sizeof collected_sources); error_text[0] = '\0'; }
+ 
+ uint8_t scan() {
+     count = 0; void *vat = nullptr; char *name;
+@@ -66,6 +68,7 @@
+     if (!ok) { set_error(clevel::error_string(error)); is_active = false; return false; }
+     current_room = 0; active_catalog = catalog_index; active_pack_level = pack_level_index; is_active = true;
+     std::memset(collected_fruit, 0, sizeof collected_fruit);
++    std::memset(collected_sources, 0, sizeof collected_sources);
+     ++content_generation; if (!content_generation) content_generation = 1;
+     error_text[0] = '\0'; return true;
+ }
+@@ -95,6 +98,35 @@
+ bool fruit_collected(uint8_t room) { return is_active && room < loaded.room_count && collected_fruit[room]; }
+ void collect_fruit(uint8_t room) { if (is_active && room < loaded.room_count) collected_fruit[room] = true; }
+ 
++bool source_collected(uint8_t room, uint8_t source) {
++    if (!is_active || room >= loaded.room_count) return false;
++    if (source >= clevel::MAX_ENTITIES) return collected_fruit[room];
++    return (collected_sources[room][source >> 3] & static_cast<uint8_t>(1u << (source & 7))) != 0;
++}
++
++void collect_source(uint8_t room, uint8_t source) {
++    if (!is_active || room >= loaded.room_count) return;
++    if (source >= clevel::MAX_ENTITIES) { collected_fruit[room] = true; return; }
++    collected_sources[room][source >> 3] |= static_cast<uint8_t>(1u << (source & 7));
++}
++
++bool key_needed(uint8_t room) {
++    if (!is_active || room >= loaded.room_count) return false;
++    const clevel::Room &r = loaded.rooms[room];
++    bool saw_chest = false;
++    for (uint8_t i = 0; i < r.entity_count; ++i) {
++        const clevel::Entity &entity = r.entities[i];
++        if (entity.type != 20) continue;
++        saw_chest = true;
++        // Empty chests do not mark a collectible source, so they require a key
++        // again after each death/restart. Strawberry chests disappear once
++        // their own source strawberry has been collected.
++        if ((entity.flags & 0x01u) != 0 || !source_collected(room, i)) return true;
++    }
++    // A deliberately placed key with no chest is still allowed to appear.
++    return !saw_chest;
++}
++
+ const char *last_error() { return error_text; }
+ 
+ } // namespace custom_levels
+--- a/src/classic.h
++++ b/src/classic.h
+@@ -93,6 +93,7 @@
+     struct {int x; int y; int w; int h;} hitbox;
+     uint8_t type;
+     uint8_t custom_flags;
++    uint8_t custom_source;
+ 
+     struct {int x; int y; int size; } hair[HAIR_SEGMENTS];
+ 
+@@ -303,7 +304,7 @@
+ void set_hair_color(int djump);
+ void draw_hair(Object *obj, int facing);
+ void unset_hair_color();
+-Object *init_object(enum type type, int x, int y, uint8_t flags = 0);
++Object *init_object(enum type type, int x, int y, uint8_t flags = 0, uint8_t source = 0xFF);
+ void destroy_object(Object *obj);
+ void draw_time(int x, int y);
+ bool solid_at(int x, int y, int w, int h);
+--- a/src/classic.cpp
++++ b/src/classic.cpp
+@@ -761,7 +761,7 @@
+         hit->djump = max_dash;
+         sfx_timer = 20;
+         //sfx(13);
+-        if(custom_levels::active()) custom_levels::collect_fruit(custom_levels::room_index());
++        if(custom_levels::active()) custom_levels::collect_source(custom_levels::room_index(), custom_source);
+         else got_fruit[level_index()] = true;
+         new LifeUp(x, y);
+         delete this;
+@@ -810,7 +810,7 @@
+         hit->djump = max_dash;
+         sfx_timer = 20;
+         //sfx(13)
+-        if(custom_levels::active()) custom_levels::collect_fruit(custom_levels::room_index());
++        if(custom_levels::active()) custom_levels::collect_source(custom_levels::room_index(), custom_source);
+         else got_fruit[level_index()] = true;
+         new LifeUp(x, y);
+         delete this;
+@@ -872,7 +872,10 @@
+         new Smoke(x + 8, y + 8);
+         // CELV entity flag bit 0 makes a fake wall empty. Flags=0 keeps
+         // original Celeste Classic behavior: a strawberry is hidden inside.
+-        if((custom_flags & 0x01u) == 0) new Fruit(x + 4, y + 4);
++        if((custom_flags & 0x01u) == 0) {
++            if(custom_levels::active()) init_object(FRUIT, x + 4, y + 4, 0, custom_source);
++            else new Fruit(x + 4, y + 4);
++        }
+         delete this;
+     }
+     hitbox = {.x=0, .y=0, .w=16, .h=16};
+@@ -923,7 +926,10 @@
+             //sfx(16);
+             // CELV entity flag bit 0 makes a locked chest empty. Flags=0
+             // preserves the original key -> chest -> strawberry puzzle.
+-            if((custom_flags & 0x01u) == 0) new Fruit(x, y - 4);
++            if((custom_flags & 0x01u) == 0) {
++                if(custom_levels::active()) init_object(FRUIT, x, y - 4, 0, custom_source);
++                else new Fruit(x, y - 4);
++            }
+             delete this;
+         }
+     }
+@@ -1184,9 +1190,10 @@
+ // object functions //
+ ///////////////////////
+ 
+-Object *init_object(type type, int x, int y, uint8_t flags) {
+-    bool has_fruit = custom_levels::active()
+-        ? custom_levels::fruit_collected(custom_levels::room_index())
++Object *init_object(type type, int x, int y, uint8_t flags, uint8_t source) {
++    const bool custom = custom_levels::active();
++    const bool source_done = custom
++        ? custom_levels::source_collected(custom_levels::room_index(), source)
+         : got_fruit[level_index()];
+     Object *object = nullptr;
+     switch(type) {
+@@ -1195,11 +1202,19 @@
+         case BALLOON: object = new Balloon(x, y); break;
+         case FALL_FLOOR: object = new FallFloor(x, y); break;
+         case SMOKE: object = new Smoke(x, y); break;
+-        case FRUIT: object = has_fruit ? nullptr : new Fruit(x, y); break;
+-        case FLY_FRUIT: object = has_fruit ? nullptr : new FlyFruit(x, y); break;
+-        case FAKE_WALL: object = has_fruit ? nullptr : new FakeWall(x, y); break;
+-        case KEY: object = has_fruit ? nullptr : new Key(x, y); break;
+-        case CHEST: object = has_fruit ? nullptr : new Chest(x, y); break;
++        case FRUIT: object = source_done ? nullptr : new Fruit(x, y); break;
++        case FLY_FRUIT: object = source_done ? nullptr : new FlyFruit(x, y); break;
++        case FAKE_WALL:
++            object = (custom && (flags & 0x01u)) || !source_done ? new FakeWall(x, y) : nullptr;
++            break;
++        case KEY:
++            object = custom
++                ? (custom_levels::key_needed(custom_levels::room_index()) ? new Key(x, y) : nullptr)
++                : (source_done ? nullptr : new Key(x, y));
++            break;
++        case CHEST:
++            object = (custom && (flags & 0x01u)) || !source_done ? new Chest(x, y) : nullptr;
++            break;
+         case PLATFORM: object = new Platform(x, y, -1); break;
+         case PLATFORM_RIGHT: object = new Platform(x, y, 1); break;
+         case MESSAGE: object = new Message(x, y); break;
+@@ -1207,7 +1222,7 @@
+         case FLAG: object = new Flag(x, y); break;
+         default: return nullptr;
+     }
+-    if(object) object->custom_flags = flags;
++    if(object) { object->custom_flags = flags; object->custom_source = source; }
+     return object;
+ }
+ 
+@@ -1222,6 +1237,7 @@
+     this->y = y;
+     hitbox = {.x=0, .y=0, .w=8, .h=8};
+     custom_flags = 0;
++    custom_source = 0xFF;
+ 
+     spd = {.x=0, .y=0};
+     rem = {.x=0, .y=0};
+@@ -1452,7 +1468,7 @@
+             init_object(PLAYER_SPAWN, custom_room.spawn_x * 8, custom_room.spawn_y * 8);
+             for(uint8_t i = 0; i < custom_room.entity_count; ++i) {
+                 const clevel::Entity &entity = custom_room.entities[i];
+-                init_object((type)entity.type, entity.x * 8, entity.y * 8, entity.flags);
++                init_object((type)entity.type, entity.x * 8, entity.y * 8, entity.flags, i);
+             }
+             // Backward compatibility with early CELV v1 writers that also
