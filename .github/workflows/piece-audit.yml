@@ -3,6 +3,8 @@ name: Piece audit
 on:
   push:
     branches: [agent/full-piece-editor-v2]
+  pull_request:
+    branches: [master]
 
 permissions:
   contents: read
