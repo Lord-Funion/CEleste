@@ -3,7 +3,7 @@ name: Build CEleste v1
 on:
   pull_request:
   push:
-    branches: [agent/custom-level-editor]
+    branches: [master, agent/custom-level-editor]
   workflow_dispatch:
 
 permissions:
