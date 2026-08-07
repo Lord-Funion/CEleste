@@ -761,7 +761,7 @@ void Fruit::update() {
         hit->djump = max_dash;
         sfx_timer = 20;
         //sfx(13);
-        if(custom_levels::active()) custom_levels::collect_fruit(custom_levels::room_index());
+        if(custom_levels::active()) custom_levels::collect_source(custom_levels::room_index(), custom_source);
         else got_fruit[level_index()] = true;
         new LifeUp(x, y);
         delete this;
@@ -810,7 +810,7 @@ void FlyFruit::update() {
         hit->djump = max_dash;
         sfx_timer = 20;
         //sfx(13)
-        if(custom_levels::active()) custom_levels::collect_fruit(custom_levels::room_index());
+        if(custom_levels::active()) custom_levels::collect_source(custom_levels::room_index(), custom_source);
         else got_fruit[level_index()] = true;
         new LifeUp(x, y);
         delete this;
@@ -872,7 +872,10 @@ void FakeWall::update() {
         new Smoke(x + 8, y + 8);
         // CELV entity flag bit 0 makes a fake wall empty. Flags=0 keeps
         // original Celeste Classic behavior: a strawberry is hidden inside.
-        if((custom_flags & 0x01u) == 0) new Fruit(x + 4, y + 4);
+        if((custom_flags & 0x01u) == 0) {
+            if(custom_levels::active()) init_object(FRUIT, x + 4, y + 4, 0, custom_source);
+            else new Fruit(x + 4, y + 4);
+        }
         delete this;
     }
     hitbox = {.x=0, .y=0, .w=16, .h=16};
@@ -923,7 +926,10 @@ void Chest::update() {
             //sfx(16);
             // CELV entity flag bit 0 makes a locked chest empty. Flags=0
             // preserves the original key -> chest -> strawberry puzzle.
-            if((custom_flags & 0x01u) == 0) new Fruit(x, y - 4);
+            if((custom_flags & 0x01u) == 0) {
+                if(custom_levels::active()) init_object(FRUIT, x, y - 4, 0, custom_source);
+                else new Fruit(x, y - 4);
+            }
             delete this;
         }
     }
@@ -1184,9 +1190,10 @@ void RoomTitle::draw() {
 // object functions //
 ///////////////////////
 
-Object *init_object(type type, int x, int y, uint8_t flags) {
-    bool has_fruit = custom_levels::active()
-        ? custom_levels::fruit_collected(custom_levels::room_index())
+Object *init_object(type type, int x, int y, uint8_t flags, uint8_t source) {
+    const bool custom = custom_levels::active();
+    const bool source_done = custom
+        ? custom_levels::source_collected(custom_levels::room_index(), source)
         : got_fruit[level_index()];
     Object *object = nullptr;
     switch(type) {
@@ -1195,11 +1202,19 @@ Object *init_object(type type, int x, int y, uint8_t flags) {
         case BALLOON: object = new Balloon(x, y); break;
         case FALL_FLOOR: object = new FallFloor(x, y); break;
         case SMOKE: object = new Smoke(x, y); break;
-        case FRUIT: object = has_fruit ? nullptr : new Fruit(x, y); break;
-        case FLY_FRUIT: object = has_fruit ? nullptr : new FlyFruit(x, y); break;
-        case FAKE_WALL: object = has_fruit ? nullptr : new FakeWall(x, y); break;
-        case KEY: object = has_fruit ? nullptr : new Key(x, y); break;
-        case CHEST: object = has_fruit ? nullptr : new Chest(x, y); break;
+        case FRUIT: object = source_done ? nullptr : new Fruit(x, y); break;
+        case FLY_FRUIT: object = source_done ? nullptr : new FlyFruit(x, y); break;
+        case FAKE_WALL:
+            object = (custom && (flags & 0x01u)) || !source_done ? new FakeWall(x, y) : nullptr;
+            break;
+        case KEY:
+            object = custom
+                ? (custom_levels::key_needed(custom_levels::room_index()) ? new Key(x, y) : nullptr)
+                : (source_done ? nullptr : new Key(x, y));
+            break;
+        case CHEST:
+            object = (custom && (flags & 0x01u)) || !source_done ? new Chest(x, y) : nullptr;
+            break;
         case PLATFORM: object = new Platform(x, y, -1); break;
         case PLATFORM_RIGHT: object = new Platform(x, y, 1); break;
         case MESSAGE: object = new Message(x, y); break;
@@ -1207,7 +1222,7 @@ Object *init_object(type type, int x, int y, uint8_t flags) {
         case FLAG: object = new Flag(x, y); break;
         default: return nullptr;
     }
-    if(object) object->custom_flags = flags;
+    if(object) { object->custom_flags = flags; object->custom_source = source; }
     return object;
 }
 
@@ -1222,6 +1237,7 @@ Object::Object(int x, int y) {
     this->y = y;
     hitbox = {.x=0, .y=0, .w=8, .h=8};
     custom_flags = 0;
+    custom_source = 0xFF;
 
     spd = {.x=0, .y=0};
     rem = {.x=0, .y=0};
@@ -1452,7 +1468,7 @@ void load_room(uint8_t x, uint8_t y) {
             init_object(PLAYER_SPAWN, custom_room.spawn_x * 8, custom_room.spawn_y * 8);
             for(uint8_t i = 0; i < custom_room.entity_count; ++i) {
                 const clevel::Entity &entity = custom_room.entities[i];
-                init_object((type)entity.type, entity.x * 8, entity.y * 8, entity.flags);
+                init_object((type)entity.type, entity.x * 8, entity.y * 8, entity.flags, i);
             }
             // Backward compatibility with early CELV v1 writers that also
             // left entity IDs in the RLE tile plane. Only instantiate one if

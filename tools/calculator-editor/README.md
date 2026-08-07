@@ -23,7 +23,7 @@ The palette includes every standalone terrain/background/decoration family used 
 
 Directional spikes and the original terrain variants that have genuine PICO-8 rotated counterparts can be rotated with Window. Moving platforms rotate between left- and right-moving versions. CELEDIT does not invent rotated art states that CEleste cannot reproduce.
 
-Gameplay behavior is the same as CEleste/Celeste Classic: keys unlock locked chests, locked chests and fake walls contain strawberries by default, big chests grant the dash upgrade, strawberries stay collected across room deaths/restarts, and rooms complete by climbing through the top edge. The summit flag is optional and is not a room exit.
+Gameplay behavior is the same as CEleste/Celeste Classic: keys unlock locked chests, locked chests and fake walls contain strawberries by default, big chests grant the dash upgrade, and rooms complete by climbing through the top edge. Custom rooms may contain multiple strawberry sources; each direct berry, chest berry, or fake-wall berry is tracked independently across deaths/restarts, so collecting one does not remove the others. The summit flag is optional and is not a room exit.
 
 The draft is stored in `CELEDITS`. Exported playable data uses a `CL......` AppVar; transferring that AppVar to a computer with TI Connect CE creates an `.8xv` file.
 

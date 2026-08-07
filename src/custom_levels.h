@@ -36,6 +36,9 @@ uint16_t generation();
 uint8_t tile(uint8_t room, uint8_t x, uint8_t y);
 bool fruit_collected(uint8_t room);
 void collect_fruit(uint8_t room);
+bool source_collected(uint8_t room, uint8_t source);
+void collect_source(uint8_t room, uint8_t source);
+bool key_needed(uint8_t room);
 const char *last_error();
 
 } // namespace custom_levels

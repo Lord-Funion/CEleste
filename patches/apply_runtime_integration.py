@@ -30,11 +30,11 @@ replace("src/classic.cpp", "    if(y < -4 and level_index() < 30) {\n", "    if(
 replace("src/classic.cpp", "void next_room() {\n    if(room.x == 2 and room.y == 1) {\n", "void next_room() {\n    if(custom_levels::active()) {\n        if(custom_levels::next_room()) {\n            const uint8_t index = custom_levels::room_index();\n            load_room(index % 8, index / 8);\n        } else if(custom_levels::next_level()) {\n            load_room(0, 0);\n        } else {\n            title_screen();\n        }\n        return;\n    }\n    if(room.x == 2 and room.y == 1) {\n")
 replace("src/classic.cpp", "void prev_room() {\n    if(level_index() < 1) return;\n", "void prev_room() {\n    if(custom_levels::active()) {\n        if(custom_levels::previous_room()) {\n            const uint8_t index = custom_levels::room_index();\n            load_room(index % 8, index / 8);\n        }\n        return;\n    }\n    if(level_index() < 1) return;\n")
 replace("src/classic.cpp", "    if(practice_mode && level_index() != 30) {\n", "    if(!custom_levels::active() && practice_mode && level_index() != 30) {\n")
-# Earlier revisions used a simple custom-level fruit guard here. Newer revisions
-# deliberately keep per-room collection state so strawberries/keys/chests/fake
-# walls stay consumed after a death/restart. Accept either integrated form.
+# Earlier revisions used either a simple custom-level fruit guard or a single
+# per-room persistence bit. Current revisions can track each strawberry source
+# independently. Accept any already-integrated custom persistence form here.
 classic = (ROOT / "src/classic.cpp").read_text()
-if "bool has_fruit = custom_levels::active()" not in classic:
+if "source_collected(" not in classic and "bool has_fruit = custom_levels::active()" not in classic:
     replace("src/classic.cpp", "    bool has_fruit = got_fruit[level_index()];\n", "    bool has_fruit = custom_levels::active() ? false : got_fruit[level_index()];\n")
 replace("src/classic.cpp", "    if(frames == 0 and level_index() < 30) {\n", "    if(frames == 0 and (custom_levels::active() or level_index() < 30)) {\n")
 insert_after("src/classic.cpp", "    update_title_sequences();\n", "\n    if(custom_level_menu::update()) {\n        profiler_end(update);\n        return;\n    }\n")

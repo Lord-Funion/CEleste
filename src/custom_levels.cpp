@@ -13,7 +13,9 @@ uint8_t current_room = 0;
 uint8_t active_catalog = 0;
 uint16_t active_pack_level = 0;
 uint16_t content_generation = 1;
-bool collected_fruit[clevel::MAX_ROOMS]{};
+bool collected_fruit[clevel::MAX_ROOMS]{}; // legacy v1 tile-plane compatibility
+constexpr uint8_t SOURCE_BYTES = (clevel::MAX_ENTITIES_PER_ROOM + 7) / 8;
+uint8_t collected_sources[clevel::MAX_ROOMS][SOURCE_BYTES]{};
 char error_text[64] = "";
 
 void set_error(const char *text) {
@@ -39,7 +41,7 @@ bool inspect_variable(const char *name, CatalogEntry &entry) {
 }
 }
 
-void initialize() { count = 0; is_active = false; current_room = 0; active_catalog = 0; active_pack_level = 0; content_generation = 1; std::memset(collected_fruit, 0, sizeof collected_fruit); error_text[0] = '\0'; }
+void initialize() { count = 0; is_active = false; current_room = 0; active_catalog = 0; active_pack_level = 0; content_generation = 1; std::memset(collected_fruit, 0, sizeof collected_fruit); std::memset(collected_sources, 0, sizeof collected_sources); error_text[0] = '\0'; }
 
 uint8_t scan() {
     count = 0; void *vat = nullptr; char *name;
@@ -66,6 +68,7 @@ bool load(uint8_t catalog_index, uint16_t pack_level_index) {
     if (!ok) { set_error(clevel::error_string(error)); is_active = false; return false; }
     current_room = 0; active_catalog = catalog_index; active_pack_level = pack_level_index; is_active = true;
     std::memset(collected_fruit, 0, sizeof collected_fruit);
+    std::memset(collected_sources, 0, sizeof collected_sources);
     ++content_generation; if (!content_generation) content_generation = 1;
     error_text[0] = '\0'; return true;
 }
@@ -94,6 +97,35 @@ uint8_t tile(uint8_t room, uint8_t x, uint8_t y) {
 
 bool fruit_collected(uint8_t room) { return is_active && room < loaded.room_count && collected_fruit[room]; }
 void collect_fruit(uint8_t room) { if (is_active && room < loaded.room_count) collected_fruit[room] = true; }
+
+bool source_collected(uint8_t room, uint8_t source) {
+    if (!is_active || room >= loaded.room_count) return false;
+    if (source >= clevel::MAX_ENTITIES_PER_ROOM) return collected_fruit[room];
+    return (collected_sources[room][source >> 3] & static_cast<uint8_t>(1u << (source & 7))) != 0;
+}
+
+void collect_source(uint8_t room, uint8_t source) {
+    if (!is_active || room >= loaded.room_count) return;
+    if (source >= clevel::MAX_ENTITIES_PER_ROOM) { collected_fruit[room] = true; return; }
+    collected_sources[room][source >> 3] |= static_cast<uint8_t>(1u << (source & 7));
+}
+
+bool key_needed(uint8_t room) {
+    if (!is_active || room >= loaded.room_count) return false;
+    const clevel::Room &r = loaded.rooms[room];
+    bool saw_chest = false;
+    for (uint8_t i = 0; i < r.entity_count; ++i) {
+        const clevel::Entity &entity = r.entities[i];
+        if (entity.type != 20) continue;
+        saw_chest = true;
+        // Empty chests do not mark a collectible source, so they require a key
+        // again after each death/restart. Strawberry chests disappear once
+        // their own source strawberry has been collected.
+        if ((entity.flags & 0x01u) != 0 || !source_collected(room, i)) return true;
+    }
+    // A deliberately placed key with no chest is still allowed to appear.
+    return !saw_chest;
+}
 
 const char *last_error() { return error_text; }
 
