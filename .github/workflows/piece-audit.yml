@@ -1,0 +1,27 @@
+name: Piece audit
+
+on:
+  push:
+    branches: [agent/full-piece-editor-v2]
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: List every map tile used by the original cartridge
+        run: |
+          python3 - <<'PY'
+          import re, collections, pathlib
+          text = pathlib.Path('src/tilemap.h').read_text()
+          data = re.search(r'tilemap_data\[tilemap_length\]\s*=\s*\{(.*?)\};', text, re.S).group(1)
+          vals = [int(x,16) for x in re.findall(r'0x([0-9a-fA-F]{1,2})', data)]
+          c = collections.Counter(vals)
+          print('UNIQUE_IDS=' + ','.join(map(str, sorted(c))))
+          print('COUNT=' + str(len(c)))
+          print('FREQUENCIES')
+          for k in sorted(c): print(f'{k:3d} 0x{k:02x} {c[k]}')
+          PY
