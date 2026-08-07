@@ -12,23 +12,25 @@
 namespace {
 constexpr uint8_t MAX_ROOMS = 8;
 constexpr uint8_t HISTORY_SIZE = 64;
-constexpr uint8_t PALETTE[] = {0,1,2,3,4,5,17,27,18,22,23,26,28,64,8,20,11,12,86,96,118};
-constexpr uint8_t ENTITY_IDS[] = {18,22,23,26,28,64,8,20,11,12,86,96};
+constexpr uint8_t PALETTE[] = {0,1,37,32,33,34,35,36,66,67,68,69,17,27,43,59,18,22,23,26,28,64,8,20,11,12,86,96,118};
+constexpr uint8_t ENTITY_IDS[] = {18,22,23,26,28,64,8,20,11,12,86,96,118};
 
 struct EditRoom { uint8_t tiles[256]; uint8_t spawn_x,spawn_y,exit_x,exit_y; };
 struct Project { char title[64]; char author[32]; uint8_t room_count; EditRoom rooms[MAX_ROOMS]; } project;
 struct Change { uint8_t room,index,before,after; } history[HISTORY_SIZE], redo_stack[HISTORY_SIZE];
-uint8_t history_count=0,redo_count=0,room_index=0,cursor_x=2,cursor_y=13,palette_index=1;
+uint8_t history_count=0,redo_count=0,room_index=0,cursor_x=2,cursor_y=13,palette_index=2;
 char notice[40]="";
 
 bool is_entity(uint8_t id){for(uint8_t v:ENTITY_IDS)if(v==id)return true;return false;}
-void init_room(EditRoom &r){std::memset(&r,0,sizeof r);r.spawn_x=2;r.spawn_y=13;r.exit_x=13;r.exit_y=1;for(uint8_t x=0;x<16;x++)r.tiles[15*16+x]=2;for(uint8_t y=0;y<16;y++){r.tiles[y*16]=2;r.tiles[y*16+15]=2;}}
+uint8_t migrate_legacy_tile(uint8_t id){if(id==2)return 32;if(id==3)return 33;if(id==4)return 66;if(id==5)return 67;return id;}
+void migrate_legacy_tiles(){for(uint8_t r=0;r<project.room_count;r++)for(uint16_t i=0;i<256;i++)project.rooms[r].tiles[i]=migrate_legacy_tile(project.rooms[r].tiles[i]);}
+void init_room(EditRoom &r){std::memset(&r,0,sizeof r);r.spawn_x=2;r.spawn_y=13;r.exit_x=13;r.exit_y=1;for(uint8_t x=0;x<16;x++)r.tiles[15*16+x]=37;for(uint8_t y=0;y<16;y++){r.tiles[y*16]=37;r.tiles[y*16+15]=37;}}
 void new_project(){std::memset(&project,0,sizeof project);std::strcpy(project.title,"CALCULATOR LEVEL");std::strcpy(project.author,"LORD FUNION");project.room_count=1;init_room(project.rooms[0]);}
 void set_notice(const char *s){std::strncpy(notice,s,sizeof notice-1);notice[sizeof notice-1]='\0';}
 void save_draft(){uint8_t h=ti_Open("CELEDITS","w");if(!h){set_notice("DRAFT SAVE FAILED");return;}ti_Write(&project,sizeof project,1,h);ti_Close(h);set_notice("DRAFT SAVED");}
-void load_draft(){uint8_t h=ti_Open("CELEDITS","r");if(!h){new_project();return;}if(ti_GetSize(h)==sizeof project&&ti_Read(&project,sizeof project,1,h)==1&&project.room_count>0&&project.room_count<=MAX_ROOMS){ti_Close(h);return;}ti_Close(h);new_project();}
+void load_draft(){uint8_t h=ti_Open("CELEDITS","r");if(!h){new_project();return;}if(ti_GetSize(h)==sizeof project&&ti_Read(&project,sizeof project,1,h)==1&&project.room_count>0&&project.room_count<=MAX_ROOMS){ti_Close(h);migrate_legacy_tiles();return;}ti_Close(h);new_project();}
 
-uint8_t tile_color(uint8_t id){if(id==0)return 0;if(id==4)return 11;if(id==5)return 255;if(id==17||id==27)return 7;if(id==26||id==28)return 224;if(id==22)return 47;if(id==18)return 192;if(id==8)return 231;if(is_entity(id))return 164;return static_cast<uint8_t>(80+(id*13)%80);}
+uint8_t tile_color(uint8_t id){if(id==0)return 0;if(id>=66&&id<=69)return 11;if(id==17||id==27||id==43||id==59)return 7;if(id==26||id==28)return 224;if(id==22)return 47;if(id==18)return 192;if(id==8)return 231;if(is_entity(id))return 164;return static_cast<uint8_t>(80+(id*13)%80);}
 void draw_sprite(uint8_t id,int x,int y){
   if(id<128&&atlas_tiles[id]) gfx_TransparentSprite_NoClip(atlas_tiles[id],x,y);
   else {gfx_SetColor(tile_color(id));gfx_FillRectangle_NoClip(x,y,8,8);}
@@ -37,7 +39,6 @@ void draw(){
   gfx_FillScreen(0);const EditRoom &r=project.rooms[room_index];
   for(uint8_t y=0;y<16;y++)for(uint8_t x=0;x<16;x++){uint8_t id=r.tiles[y*16+x];if(id)draw_sprite(id,8+x*8,48+y*8);}
   draw_sprite(1,8+r.spawn_x*8,48+r.spawn_y*8);
-  draw_sprite(118,8+r.exit_x*8,48+r.exit_y*8);
   gfx_SetColor(255);gfx_Rectangle(8+cursor_x*8,48+cursor_y*8,8,8);
   gfx_SetTextFGColor(255);gfx_PrintStringXY("CELESTE EDITOR",8,6);gfx_PrintStringXY(project.title,8,18);gfx_PrintStringXY("ROOM",8,31);gfx_SetTextXY(42,31);gfx_PrintUInt(room_index+1,1);gfx_PrintChar('/');gfx_PrintUInt(project.room_count,1);
   gfx_PrintStringXY("TILE",160,52);gfx_SetTextXY(199,52);gfx_PrintUInt(PALETTE[palette_index],1);draw_sprite(PALETTE[palette_index],236,48);
@@ -49,7 +50,7 @@ void paint(uint8_t value){EditRoom &r=project.rooms[room_index];const uint8_t in
 void undo(){if(!history_count)return;Change c=history[--history_count];project.rooms[c.room].tiles[c.index]=c.before;if(redo_count<HISTORY_SIZE)redo_stack[redo_count++]=c;room_index=c.room;}
 void redo(){if(!redo_count)return;Change c=redo_stack[--redo_count];project.rooms[c.room].tiles[c.index]=c.after;if(history_count<HISTORY_SIZE)history[history_count++]=c;room_index=c.room;}
 void details(){gfx_End();os_ClrHomeFull();os_GetStringInput("LEVEL NAME",project.title,sizeof project.title);os_GetStringInput("AUTHOR",project.author,sizeof project.author);gfx_Begin();gfx_SetDrawBuffer();gfx_SetTextTransparentColor(0);gfx_SetPalette(mypalette,sizeof mypalette,0);}
-void help(){gfx_FillScreen(0);gfx_SetTextFGColor(255);gfx_PrintStringXY("CELESTE EDITOR HELP",8,8);gfx_PrintStringXY("MODE cycles tile IDs.",8,30);gfx_PrintStringXY("Choose tile 1, then place",8,42);gfx_PrintStringXY("to move the player spawn.",8,54);gfx_PrintStringXY("Choose tile 118 to set the",8,66);gfx_PrintStringXY("suggested exit position.",8,78);gfx_PrintStringXY("The playable exit is a hole",8,90);gfx_PrintStringXY("in the TOP of each room.",8,102);gfx_PrintStringXY("GRAPH exports an AppVar.",8,126);gfx_PrintStringXY("TI Connect saves it as .8xv",8,138);gfx_PrintStringXY("Press any key.",8,190);gfx_SwapDraw();while(!os_GetCSC()){}while(os_GetCSC()){} }
+void help(){gfx_FillScreen(0);gfx_SetTextFGColor(255);gfx_PrintStringXY("CELESTE EDITOR HELP",8,8);gfx_PrintStringXY("MODE cycles real PICO-8",8,30);gfx_PrintStringXY("terrain and entity IDs.",8,42);gfx_PrintStringXY("Tile 1 sets player spawn.",8,58);gfx_PrintStringXY("118 is the summit flag",8,74);gfx_PrintStringXY("entity, NOT the exit.",8,86);gfx_PrintStringXY("Climb out through the TOP",8,102);gfx_PrintStringXY("to complete each room.",8,114);gfx_PrintStringXY("GRAPH exports an AppVar.",8,138);gfx_PrintStringXY("TI Connect saves it as .8xv",8,150);gfx_PrintStringXY("Press any key.",8,190);gfx_SwapDraw();while(!os_GetCSC()){}while(os_GetCSC()){} }
 
 struct Writer{uint8_t *p;std::size_t cap,pos;bool ok;void u8(uint8_t v){if(pos<cap)p[pos++]=v;else ok=false;}void u16(uint16_t v){u8(v);u8(v>>8);}void u32(uint32_t v){u8(v);u8(v>>8);u8(v>>16);u8(v>>24);}void bytes(const void *src,std::size_t n){if(n<=cap-pos){std::memcpy(p+pos,src,n);pos+=n;}else ok=false;}};
 void patch_u32(uint8_t *p,uint32_t v){p[0]=v;p[1]=v>>8;p[2]=v>>16;p[3]=v>>24;}
@@ -96,10 +97,6 @@ int main(){
         project.rooms[room_index].spawn_x=cursor_x;
         project.rooms[room_index].spawn_y=cursor_y;
         set_notice("SPAWN SET");
-      }else if(id==118){
-        project.rooms[room_index].exit_x=cursor_x;
-        project.rooms[room_index].exit_y=cursor_y;
-        set_notice("EXIT MARKED");
       }else{
         paint(id);
       }
