@@ -761,7 +761,8 @@ void Fruit::update() {
         hit->djump = max_dash;
         sfx_timer = 20;
         //sfx(13);
-        got_fruit[level_index()] = true;
+        if(custom_levels::active()) custom_levels::collect_fruit(custom_levels::room_index());
+        else got_fruit[level_index()] = true;
         new LifeUp(x, y);
         delete this;
     } else {
@@ -809,7 +810,8 @@ void FlyFruit::update() {
         hit->djump = max_dash;
         sfx_timer = 20;
         //sfx(13)
-        got_fruit[level_index()] = true;
+        if(custom_levels::active()) custom_levels::collect_fruit(custom_levels::room_index());
+        else got_fruit[level_index()] = true;
         new LifeUp(x, y);
         delete this;
     }
@@ -868,7 +870,9 @@ void FakeWall::update() {
         new Smoke(x + 8, y);
         new Smoke(x, y + 8);
         new Smoke(x + 8, y + 8);
-        new Fruit(x + 4, y + 4);
+        // CELV entity flag bit 0 makes a fake wall empty. Flags=0 keeps
+        // original Celeste Classic behavior: a strawberry is hidden inside.
+        if((custom_flags & 0x01u) == 0) new Fruit(x + 4, y + 4);
         delete this;
     }
     hitbox = {.x=0, .y=0, .w=16, .h=16};
@@ -917,7 +921,9 @@ void Chest::update() {
         if(timer <= 0) {
             sfx_timer = 20;
             //sfx(16);
-            new Fruit(x, y - 4);
+            // CELV entity flag bit 0 makes a locked chest empty. Flags=0
+            // preserves the original key -> chest -> strawberry puzzle.
+            if((custom_flags & 0x01u) == 0) new Fruit(x, y - 4);
             delete this;
         }
     }
@@ -959,6 +965,16 @@ Message::Message(int x, int y) : Object(x, y) {
 }
 
 void Message::draw() {
+    // In the original cartridge the memorial artwork is four map sprites
+    // (70/71 over 86/87). Custom levels store the message as one logical
+    // entity, so draw the complete sign here instead of requiring authors
+    // to assemble companion sprite fragments by hand.
+    if(custom_levels::active()) {
+        spr(70, x, y - 8);
+        spr(71, x + 8, y - 8);
+        spr(86, x, y);
+        spr(87, x + 8, y);
+    }
     const char *text = "-- celeste mountain --#this memorial to those# perished on the climb";
     if(check_player(4, 0)) {
         if(index / 2 < strlen(text)) {
@@ -1024,7 +1040,12 @@ void BigChest::draw() {
             chest_particle_count = 0;
             flash_bg = false;
             new_bg = true;
-            new Orb(x + 4, y + 4);
+            // Custom big chests can opt into a three-dash upgrade with
+            // entity flag bit 1; ordinary/custom flags=0 gives two dashes.
+            const uint8_t target = custom_levels::active()
+                ? ((custom_flags & 0x02u) ? 3 : 2)
+                : (new_game_plus ? 3 : 2);
+            new Orb(x + 4, y + 4, target);
             pause_player = false;
         }
         for(int i = 0; i < chest_particle_count; i++) {
@@ -1037,10 +1058,11 @@ void BigChest::draw() {
     spr(113, x + 8, y + 8);
 }
 
-Orb::Orb(int x, int y) : Object(x, y) {
+Orb::Orb(int x, int y, uint8_t target_dashes) : Object(x, y) {
     spd.y = SP(-4);
     solids = false;
     chest_particle_count = 0;
+    this->target_dashes = target_dashes ? target_dashes : (new_game_plus ? 3 : 2);
 }
 
 void Orb::draw() {
@@ -1051,7 +1073,7 @@ void Orb::draw() {
         //sfx(51);
         freeze = 10;
         shake = 10;
-        max_dash = new_game_plus ? 3 : 2;
+        max_dash = target_dashes;
         hit->djump = max_dash;
         delete this;
     } else {
@@ -1162,42 +1184,31 @@ void RoomTitle::draw() {
 // object functions //
 ///////////////////////
 
-Object *init_object(type type, int x, int y) {
-    bool has_fruit = custom_levels::active() ? false : got_fruit[level_index()];
+Object *init_object(type type, int x, int y, uint8_t flags) {
+    bool has_fruit = custom_levels::active()
+        ? custom_levels::fruit_collected(custom_levels::room_index())
+        : got_fruit[level_index()];
+    Object *object = nullptr;
     switch(type) {
-        case PLAYER_SPAWN:
-            return new PlayerSpawn(x, y);
-        case SPRING:
-            return new Spring(x, y);
-        case BALLOON:
-            return new Balloon(x, y);
-        case FALL_FLOOR:
-            return new FallFloor(x, y);
-        case SMOKE:
-            return new Smoke(x, y);
-        case FRUIT:
-            return has_fruit ? nullptr : new Fruit(x, y);
-        case FLY_FRUIT:
-            return has_fruit ? nullptr : new FlyFruit(x, y);
-        case FAKE_WALL:
-            return has_fruit ? nullptr : new FakeWall(x, y);
-        case KEY:
-            return has_fruit ? nullptr : new Key(x, y);
-        case CHEST:
-            return has_fruit ? nullptr : new Chest(x, y);
-        case PLATFORM:
-            return new Platform(x, y, -1);
-        case PLATFORM_RIGHT:
-            return new Platform(x, y, 1);
-        case MESSAGE:
-            return new Message(x, y);
-        case BIG_CHEST:
-            return new BigChest(x, y);
-        case FLAG:
-            return new Flag(x, y);
-        default:
-            return nullptr;
+        case PLAYER_SPAWN: object = new PlayerSpawn(x, y); break;
+        case SPRING: object = new Spring(x, y); break;
+        case BALLOON: object = new Balloon(x, y); break;
+        case FALL_FLOOR: object = new FallFloor(x, y); break;
+        case SMOKE: object = new Smoke(x, y); break;
+        case FRUIT: object = has_fruit ? nullptr : new Fruit(x, y); break;
+        case FLY_FRUIT: object = has_fruit ? nullptr : new FlyFruit(x, y); break;
+        case FAKE_WALL: object = has_fruit ? nullptr : new FakeWall(x, y); break;
+        case KEY: object = has_fruit ? nullptr : new Key(x, y); break;
+        case CHEST: object = has_fruit ? nullptr : new Chest(x, y); break;
+        case PLATFORM: object = new Platform(x, y, -1); break;
+        case PLATFORM_RIGHT: object = new Platform(x, y, 1); break;
+        case MESSAGE: object = new Message(x, y); break;
+        case BIG_CHEST: object = new BigChest(x, y); break;
+        case FLAG: object = new Flag(x, y); break;
+        default: return nullptr;
     }
+    if(object) object->custom_flags = flags;
+    return object;
 }
 
 Object::Object(int x, int y) {
@@ -1210,6 +1221,7 @@ Object::Object(int x, int y) {
     this->x = x;
     this->y = y;
     hitbox = {.x=0, .y=0, .w=8, .h=8};
+    custom_flags = 0;
 
     spd = {.x=0, .y=0};
     rem = {.x=0, .y=0};
@@ -1432,10 +1444,34 @@ void load_room(uint8_t x, uint8_t y) {
     }
 
     // entities
-    for(uint8_t tx = 0; tx <= 15; tx++) {
-        for(uint8_t ty = 0; ty <= 15; ty++) {
-            uint8_t tile = mget(room.x * 16 + tx, room.y * 16 + ty);
-            init_object((type) (tile), tx * 8, ty * 8);
+    if(custom_levels::active()) {
+        const clevel::Level *level = custom_levels::level();
+        const uint8_t ri = custom_levels::room_index();
+        if(level && ri < level->room_count) {
+            const clevel::Room &custom_room = level->rooms[ri];
+            init_object(PLAYER_SPAWN, custom_room.spawn_x * 8, custom_room.spawn_y * 8);
+            for(uint8_t i = 0; i < custom_room.entity_count; ++i) {
+                const clevel::Entity &entity = custom_room.entities[i];
+                init_object((type)entity.type, entity.x * 8, entity.y * 8, entity.flags);
+            }
+            // Backward compatibility with early CELV v1 writers that also
+            // left entity IDs in the RLE tile plane. Only instantiate one if
+            // no explicit entity record occupies that coordinate.
+            for(uint8_t ty = 0; ty < 16; ++ty) for(uint8_t tx = 0; tx < 16; ++tx) {
+                const uint8_t raw = custom_room.tiles[ty * 16 + tx];
+                bool recorded = false;
+                for(uint8_t i = 0; i < custom_room.entity_count; ++i) {
+                    if(custom_room.entities[i].x == tx && custom_room.entities[i].y == ty) { recorded = true; break; }
+                }
+                if(!recorded) init_object((type)raw, tx * 8, ty * 8);
+            }
+        }
+    } else {
+        for(uint8_t tx = 0; tx <= 15; tx++) {
+            for(uint8_t ty = 0; ty <= 15; ty++) {
+                uint8_t tile = mget(room.x * 16 + tx, room.y * 16 + ty);
+                init_object((type) (tile), tx * 8, ty * 8);
+            }
         }
     }
 

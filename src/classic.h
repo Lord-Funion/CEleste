@@ -92,6 +92,7 @@ public:
     int y;
     struct {int x; int y; int w; int h;} hitbox;
     uint8_t type;
+    uint8_t custom_flags;
 
     struct {int x; int y; int size; } hair[HAIR_SEGMENTS];
 
@@ -261,7 +262,8 @@ public:
 
 class Orb : public Object {
 public:
-    Orb(int x, int y);
+    Orb(int x, int y, uint8_t target_dashes = 0);
+    uint8_t target_dashes;
     void draw() override;
 };
 
@@ -301,7 +303,7 @@ void create_hair(Object *obj);
 void set_hair_color(int djump);
 void draw_hair(Object *obj, int facing);
 void unset_hair_color();
-Object *init_object(enum type type, int x, int y);
+Object *init_object(enum type type, int x, int y, uint8_t flags = 0);
 void destroy_object(Object *obj);
 void draw_time(int x, int y);
 bool solid_at(int x, int y, int w, int h);

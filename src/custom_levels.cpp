@@ -13,6 +13,7 @@ uint8_t current_room = 0;
 uint8_t active_catalog = 0;
 uint16_t active_pack_level = 0;
 uint16_t content_generation = 1;
+bool collected_fruit[clevel::MAX_ROOMS]{};
 char error_text[64] = "";
 
 void set_error(const char *text) {
@@ -38,7 +39,7 @@ bool inspect_variable(const char *name, CatalogEntry &entry) {
 }
 }
 
-void initialize() { count = 0; is_active = false; current_room = 0; active_catalog = 0; active_pack_level = 0; content_generation = 1; error_text[0] = '\0'; }
+void initialize() { count = 0; is_active = false; current_room = 0; active_catalog = 0; active_pack_level = 0; content_generation = 1; std::memset(collected_fruit, 0, sizeof collected_fruit); error_text[0] = '\0'; }
 
 uint8_t scan() {
     count = 0; void *vat = nullptr; char *name;
@@ -64,6 +65,7 @@ bool load(uint8_t catalog_index, uint16_t pack_level_index) {
     ti_Close(handle);
     if (!ok) { set_error(clevel::error_string(error)); is_active = false; return false; }
     current_room = 0; active_catalog = catalog_index; active_pack_level = pack_level_index; is_active = true;
+    std::memset(collected_fruit, 0, sizeof collected_fruit);
     ++content_generation; if (!content_generation) content_generation = 1;
     error_text[0] = '\0'; return true;
 }
@@ -87,11 +89,11 @@ uint16_t generation() { return content_generation; }
 
 uint8_t tile(uint8_t room, uint8_t x, uint8_t y) {
     if (!is_active || room >= loaded.room_count || x >= 16 || y >= 16) return 0;
-    const clevel::Room &r = loaded.rooms[room];
-    if (x == r.spawn_x && y == r.spawn_y) return 1;
-    for (uint8_t i = 0; i < r.entity_count; ++i) if (r.entities[i].x == x && r.entities[i].y == y) return r.entities[i].type;
-    return r.tiles[y * 16 + x];
+    return loaded.rooms[room].tiles[y * 16 + x];
 }
+
+bool fruit_collected(uint8_t room) { return is_active && room < loaded.room_count && collected_fruit[room]; }
+void collect_fruit(uint8_t room) { if (is_active && room < loaded.room_count) collected_fruit[room] = true; }
 
 const char *last_error() { return error_text; }
 
