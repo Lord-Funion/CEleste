@@ -41,10 +41,17 @@ jobs:
           git diff --exit-code -- src/classic.cpp src/emu.cpp src/emu.h
           g++ -std=c++17 -Wall -Wextra -Werror -Isrc -c src/clevel_format.cpp -o /tmp/clevel_format.o
 
+      - name: Generate CEleste graphics
+        run: |
+          set -euxo pipefail
+          make gfx
+          test -s src/gfx/atlas.h
+          test -s src/gfx/atlas.c
+          test -s src/gfx/gfx.h
+
       - name: Build CEleste
         run: |
           set -euxo pipefail
-          make clean || true
           make -j2
           test -s bin/CELESTE.8xp
 
