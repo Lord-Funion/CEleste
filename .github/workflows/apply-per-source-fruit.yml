@@ -6,6 +6,8 @@ on:
     paths:
       - .github/per-source-fruit.patch
       - .github/workflows/apply-per-source-fruit.yml
+  pull_request:
+    branches: [master]
 
 permissions:
   contents: write
