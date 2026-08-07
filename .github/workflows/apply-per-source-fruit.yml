@@ -21,6 +21,9 @@ jobs:
           ref: agent/per-source-fruit-state
       - name: Apply source persistence patch
         run: |
+          # The staged patch intentionally ends after six old/new lines in its
+          # final hunk; normalize that hunk count before applying.
+          sed -i 's/@@ -1452,7 +1468,7 @@/@@ -1452,6 +1468,6 @@/' .github/per-source-fruit.patch
           git apply --check .github/per-source-fruit.patch
           git apply .github/per-source-fruit.patch
           git diff --check
