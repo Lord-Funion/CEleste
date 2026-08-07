@@ -28,4 +28,15 @@ jobs:
           print('COUNT=' + str(len(c)))
           print('FREQUENCIES')
           for k in sorted(c): print(f'{k:3d} 0x{k:02x} {c[k]}')
+          print('COMPOUND_NEIGHBORHOODS')
+          targets={11,12,22,28,64,86,96,118}
+          for idx,v in enumerate(vals):
+              if v not in targets: continue
+              gx,gy=idx%128,idx//128
+              print(f'ID {v} global=({gx},{gy}) room=({gx//16},{gy//16}) local=({gx%16},{gy%16})')
+              for yy in range(max(0,gy-2),min(64,gy+3)):
+                  row=[]
+                  for xx in range(max(0,gx-2),min(128,gx+3)):
+                      row.append(f'{vals[yy*128+xx]:02x}')
+                  print('  '+' '.join(row))
           PY
