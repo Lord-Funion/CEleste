@@ -12,6 +12,7 @@ All integers are unsigned and little-endian. All text is printable ASCII. Export
 - Normal campaign data remains compiled into CEleste and is never overwritten.
 - Unknown versions or malformed records are rejected before gameplay.
 - The calculator can read the payload directly from RAM or archive through `fileioc`.
+- Terrain and logical gameplay entities remain separate, so compound objects do not need to be assembled from internal sprite fragments.
 
 ## Payload header
 
@@ -39,7 +40,7 @@ Immediately after the header are the title, author, and description bytes, with 
 
 ## Level records
 
-A level's item count is its room count. Version 1 requires at least one room and supports up to 32 in the portable format. The calculator runtime may enforce a lower limit.
+A level's item count is its room count. Version 1 requires at least one room and supports up to 32 in the portable format.
 
 Each room starts with a 2-byte `record length`. This length counts the bytes after the length field and allows a parser to skip a future extended record.
 
@@ -48,7 +49,7 @@ Each room starts with a 2-byte `record length`. This length counts the bytes aft
 | width | 1 | Version 1 runtime requires 16 |
 | height | 1 | Version 1 runtime requires 16 |
 | spawn X/Y | 2 | Player-spawn cell |
-| exit X/Y | 2 | Suggested room-exit cell; gameplay completion still requires leaving through the top |
+| exit X/Y | 2 | Legacy/suggested exit metadata; gameplay completion still requires leaving through the top |
 | flags | 1 | Reserved |
 | reserved | 1 | Zero |
 | compressed tile length | 2 | Byte length of RLE stream |
@@ -59,13 +60,15 @@ Each room starts with a 2-byte `record length`. This length counts the bytes aft
 
 ### Tile RLE
 
-Tiles are flattened row-major. A 16x16 room expands to exactly 256 bytes. Each pair is a one-byte run count from 1 through 255 followed by a one-byte tile ID.
+Tiles are flattened row-major. A 16×16 room expands to exactly 256 bytes. Each pair is a one-byte run count from 1 through 255 followed by a one-byte tile ID.
 
 A decoder must reject zero-length runs, odd-length streams, overflow beyond the room area, or streams that do not expand to exactly 256 bytes.
 
+Current exporters write **terrain/map tiles only** to this plane. Gameplay entities are encoded in the entity list below. This prevents an entity sprite ID from accidentally receiving terrain collision or layer behavior.
+
 ### Entities
 
-Entity records are four bytes: `type`, `x`, `y`, and `flags`. Version 1 uses the existing CEleste/PICO-8 tile IDs:
+Entity records are four bytes: `type`, `x`, `y`, and `flags`. Version 1 uses the existing CEleste/PICO-8 gameplay IDs:
 
 | ID | Object |
 |---:|---|
@@ -74,17 +77,38 @@ Entity records are four bytes: `type`, `x`, `y`, and `flags`. Version 1 uses the
 | 11 | Moving platform, left |
 | 12 | Moving platform, right |
 | 18 | Spring |
-| 20 | Chest |
+| 20 | Locked chest |
 | 22 | Dash balloon |
 | 23 | Falling floor |
 | 26 | Strawberry |
 | 28 | Flying strawberry |
 | 64 | Fake wall |
-| 86 | Message |
-| 96 | Big chest |
+| 86 | Memorial/message |
+| 96 | Big/dash-upgrade chest |
 | 118 | Summit flag |
 
-The calculator loader overlays the player spawn and entity records on the room's terrain tiles when CEleste requests a tile.
+The calculator runtime instantiates entity records directly and passes the `flags` byte to the gameplay object. Multi-sprite entities are logical pieces: for example, one type-64 entity creates the complete 16×16 fake wall and one type-96 entity creates the complete 16×16 big chest. Companion sprites are rendering details and are not separate CELV entities.
+
+#### Entity flag meanings used by v1.0.0
+
+Unlisted bits are reserved and exporters should write them as zero.
+
+| Entity | Bit | Meaning when set |
+|---|---:|---|
+| Locked chest (`20`) | 0 (`0x01`) | Empty chest; do not spawn a strawberry after unlocking |
+| Fake wall (`64`) | 0 (`0x01`) | Empty fake wall; do not spawn a strawberry when broken |
+| Big chest (`96`) | 1 (`0x02`) | Upgrade to three dashes instead of the default two |
+
+Therefore the original/default Celeste behavior uses `flags = 0`: locked chests and fake walls contain strawberries, and big chests upgrade Madeline to two dashes.
+
+Keys use the original room-level `has_key` behavior: collecting a key unlocks locked chests in that room. Dash balloons refill the currently available maximum dash count. Rooms still advance only when Madeline crosses the top edge; touching the summit flag does not complete an ordinary custom room.
+
+Current Studio validation also treats compound objects as complete footprints:
+
+- fake wall: 2×2 cells anchored at its top-left;
+- big chest: 2×2 cells anchored at its top-left;
+- memorial/message: 2×2 visual footprint with entity anchor at the lower-left;
+- moving platform: two cells wide.
 
 ## Pack records
 
@@ -118,17 +142,18 @@ Names contain only uppercase ASCII letters and digits. Importers must not rely o
 
 ## Limits and security
 
-Parsers must reject:
+Parsers/exporters must reject or flag:
 
 - payloads shorter than 34 bytes;
 - incorrect magic, unsupported version, or unsupported kind;
 - total-length or CRC mismatch;
 - metadata exceeding the documented limits;
 - zero or excessive room counts;
-- non-16x16 rooms in the current calculator runtime;
+- non-16×16 rooms in the current calculator runtime;
 - invalid RLE;
-- entities outside room bounds;
-- excessive entity counts;
+- entities or compound footprints outside room bounds;
+- overlapping logical gameplay footprints;
+- excessive entity counts (the calculator runtime supports 48 per room);
 - truncated nested levels;
 - trailing bytes not accounted for by records.
 
