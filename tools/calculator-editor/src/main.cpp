@@ -97,7 +97,7 @@ int main(){
     if(pressed(4,kb_Stat)) details();
     if(pressed(3,kb_Yequ)) help();
     if(pressed(1,kb_Clear)) running=false;
-    std::memcpy(old,kb_Data,sizeof old);
+    for(uint8_t group=0;group<8;group++) old[group]=kb_Data[group];
   }
   save_draft();gfx_End();return 0;
 }
