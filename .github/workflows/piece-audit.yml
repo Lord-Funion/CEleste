@@ -18,9 +18,11 @@ jobs:
         run: |
           python3 - <<'PY'
           import re, collections, pathlib
-          text = pathlib.Path('src/tilemap.h').read_text()
-          data = re.search(r'tilemap_data\[tilemap_length\]\s*=\s*\{(.*?)\};', text, re.S).group(1)
-          vals = [int(x,16) for x in re.findall(r'0x([0-9a-fA-F]{1,2})', data)]
+          text = pathlib.Path('src/emu.cpp').read_text()
+          m = re.search(r'const uint8_t tilemap\s*\[[^]]*\]\s*=\s*\{(.*?)\};', text, re.S)
+          if not m:
+              raise SystemExit('could not find embedded tilemap')
+          vals = [int(x,16) for x in re.findall(r'0x([0-9a-fA-F]{1,2})', m.group(1))]
           c = collections.Counter(vals)
           print('UNIQUE_IDS=' + ','.join(map(str, sorted(c))))
           print('COUNT=' + str(len(c)))
