@@ -1,0 +1,34 @@
+name: Apply full piece implementation
+
+on:
+  push:
+    branches: [agent/full-piece-editor-v2]
+    paths:
+      - .github/full-piece.patch.part1
+      - .github/full-piece.patch.part2
+      - .github/full-piece.patch.part3
+      - .github/workflows/apply-full-piece.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/full-piece-editor-v2
+      - name: Apply implementation patch
+        run: |
+          cat .github/full-piece.patch.part1 .github/full-piece.patch.part2 .github/full-piece.patch.part3 > /tmp/full-piece.patch
+          git apply --check /tmp/full-piece.patch
+          git apply /tmp/full-piece.patch
+          git diff --check
+      - name: Commit implementation
+        run: |
+          git config user.name "Lord-Funion Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/custom_levels.h src/custom_levels.cpp src/classic.h src/classic.cpp tools/calculator-editor/src/main.cpp
+          git commit -m "Complete custom level pieces and gameplay mechanics"
+          git push origin HEAD:agent/full-piece-editor-v2
