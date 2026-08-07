@@ -55,11 +55,12 @@ jobs:
           make -j2
           test -s bin/CELESTE.8xp
 
-      - name: Build CELEDIT
+      - name: Build CELEDIT with PICO-8 sprites
         working-directory: tools/calculator-editor
         run: |
           set -euxo pipefail
           make clean || true
+          bash prepare-gfx.sh
           make -j2
           test -s bin/CELEDIT.8xp
 
