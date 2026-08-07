@@ -69,7 +69,8 @@ jobs:
           mkdir -p release
           cp bin/CELESTE.8xp release/CEleste-v1.0.0.8xp
           cp tools/calculator-editor/bin/CELEDIT.8xp release/CELEDIT-v1.0.0.8xp
-          sha256sum release/*.8xp | tee release/SHA256SUMS.txt
+          (cd release && sha256sum *.8xp > SHA256SUMS.txt)
+          cat release/SHA256SUMS.txt
           ls -lh release
 
       - name: Upload v1.0.0 calculator binaries
