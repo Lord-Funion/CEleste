@@ -34,6 +34,7 @@ bool next_level();
 uint16_t pack_level_index();
 uint16_t generation();
 uint8_t tile(uint8_t room, uint8_t x, uint8_t y);
+uint8_t tile_rotation(uint8_t room, uint8_t x, uint8_t y);
 bool fruit_collected(uint8_t room);
 void collect_fruit(uint8_t room);
 bool source_collected(uint8_t room, uint8_t source);
