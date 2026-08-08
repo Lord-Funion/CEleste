@@ -19,7 +19,11 @@ def insert_after(path: str, marker: str, addition: str) -> None:
 replace("src/emu.h", "extern const uint8_t tilemap[64 * 128];\n\n#define mget(x, y) tilemap[(x) + (y) * 128]\n", "extern const uint8_t tilemap[64 * 128];\n\nuint8_t mget(int x, int y);\n")
 insert_after("src/emu.cpp", '#include "practice.h"\n', '#include "custom_levels.h"\n')
 insert_after("src/emu.cpp", "#define SAVE_NAME \"CelesteS\"\n", "\nuint8_t mget(int x, int y) {\n    if(custom_levels::active()) {\n        if(x < 0 || y < 0) return 0;\n        const uint8_t room_index = static_cast<uint8_t>((x / 16) + (y / 16) * 8);\n        return custom_levels::tile(room_index, static_cast<uint8_t>(x % 16), static_cast<uint8_t>(y % 16));\n    }\n    if(x < 0 || x >= 128 || y < 0 || y >= 64) return 0;\n    return tilemap[x + y * 128];\n}\n")
-replace("src/emu.cpp", "            uint8_t tile = tilemap[x + cell_x + (y + cell_y) * 128];\n", "            uint8_t tile = mget(x + cell_x, y + cell_y);\n")
+# Rotation v2 expands this map hook, so an existing mget-based renderer is
+# already integrated even if the old one-line replacement is no longer present.
+emu = (ROOT / "src/emu.cpp").read_text()
+if "uint8_t tile = mget(" not in emu:
+    replace("src/emu.cpp", "            uint8_t tile = tilemap[x + cell_x + (y + cell_y) * 128];\n", "            uint8_t tile = mget(x + cell_x, y + cell_y);\n")
 replace("src/emu.cpp", "        int y;\n        gfx_rletsprite_t *sprite;\n    } cache[3] = {};\n    auto entry = &cache[layers - 1];\n    if(entry->x != cell_x || entry->y != cell_y || !entry->sprite) {\n        entry->x = cell_x;\n        entry->y = cell_y;\n", "        int y;\n        uint16_t generation;\n        gfx_rletsprite_t *sprite;\n    } cache[3] = {};\n    auto entry = &cache[layers - 1];\n    const uint16_t generation = custom_levels::generation();\n    if(entry->x != cell_x || entry->y != cell_y || entry->generation != generation || !entry->sprite) {\n        entry->x = cell_x;\n        entry->y = cell_y;\n        entry->generation = generation;\n")
 
 insert_after("src/classic.cpp", '#include "practice.h"\n', '#include "custom_levels.h"\n#include "custom_level_menu.h"\n')
