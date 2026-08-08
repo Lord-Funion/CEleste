@@ -23,29 +23,61 @@ void set_error(const char *text) {
     error_text[sizeof error_text - 1] = '\0';
 }
 
+bool payload_view(const uint8_t *data, uint16_t size, const uint8_t *&payload, uint16_t &payload_size) {
+    payload = data;
+    payload_size = size;
+    if (!data) return false;
+    if (size >= 4 && std::memcmp(data, "CELV", 4) == 0) return true;
+
+    // Studio builds before the AppVar-wrapper fix stored an extra little-endian
+    // payload length in front of CELV. Accept those AppVars too so already-
+    // transferred levels do not have to be recreated.
+    if (size >= 6) {
+        const uint16_t legacy_size = static_cast<uint16_t>(data[0] | (static_cast<uint16_t>(data[1]) << 8));
+        if (legacy_size + 2u == size && std::memcmp(data + 2, "CELV", 4) == 0) {
+            payload = data + 2;
+            payload_size = static_cast<uint16_t>(size - 2);
+            return true;
+        }
+    }
+    return false;
+}
+
 bool inspect_variable(const char *name, CatalogEntry &entry) {
-    const uint8_t handle = ti_OpenVar(name, "r", TI_APPVAR_TYPE);
+    const uint8_t handle = ti_OpenVar(name, "r", OS_TYPE_APPVAR);
     if (!handle) return false;
     const uint16_t size = ti_GetSize(handle);
     const auto *data = static_cast<const uint8_t *>(ti_GetDataPtr(handle));
-    clevel::PayloadInfo info{}; clevel::Error error;
-    const bool ok = data && clevel::inspect(data, size, info, error);
+    const uint8_t *payload = nullptr;
+    uint16_t payload_size = 0;
+    const bool candidate = payload_view(data, size, payload, payload_size);
+    clevel::PayloadInfo info{};
+    clevel::Error error = clevel::Error::Truncated;
+    const bool ok = candidate && clevel::inspect(payload, payload_size, info, error);
     if (ok) {
         std::strncpy(entry.variable_name, name, 8); entry.variable_name[8] = '\0';
         std::strncpy(entry.title, info.title, clevel::MAX_TITLE); entry.title[clevel::MAX_TITLE] = '\0';
         std::strncpy(entry.author, info.author, clevel::MAX_AUTHOR); entry.author[clevel::MAX_AUTHOR] = '\0';
         entry.id = info.id; entry.item_count = info.item_count; entry.kind = info.kind;
         entry.archived = ti_IsArchived(handle);
+    } else if (candidate) {
+        set_error(clevel::error_string(error));
     }
-    ti_Close(handle); return ok;
+    ti_Close(handle);
+    return ok;
 }
 }
 
 void initialize() { count = 0; is_active = false; current_room = 0; active_catalog = 0; active_pack_level = 0; content_generation = 1; std::memset(collected_fruit, 0, sizeof collected_fruit); std::memset(collected_sources, 0, sizeof collected_sources); error_text[0] = '\0'; }
 
 uint8_t scan() {
-    count = 0; void *vat = nullptr; char *name;
-    while (count < MAX_CATALOG_ENTRIES && (name = ti_DetectVar(&vat, "CELV", TI_APPVAR_TYPE)) != nullptr) {
+    count = 0;
+    error_text[0] = '\0';
+    void *vat = nullptr;
+    char *name;
+    // Enumerate AppVars by type, then inspect their bytes ourselves. This
+    // recognizes both normal raw-CELV AppVars and the legacy Studio wrapper.
+    while (count < MAX_CATALOG_ENTRIES && (name = ti_DetectVar(&vat, nullptr, OS_TYPE_APPVAR)) != nullptr) {
         if (inspect_variable(name, catalog[count])) ++count;
     }
     return count;
@@ -56,14 +88,19 @@ const CatalogEntry *catalog_entry(uint8_t index) { return index < count ? &catal
 
 bool load(uint8_t catalog_index, uint16_t pack_level_index) {
     if (catalog_index >= count) { set_error("catalog index out of range"); return false; }
-    const uint8_t handle = ti_OpenVar(catalog[catalog_index].variable_name, "r", TI_APPVAR_TYPE);
+    const uint8_t handle = ti_OpenVar(catalog[catalog_index].variable_name, "r", OS_TYPE_APPVAR);
     if (!handle) { set_error("could not open AppVar"); return false; }
-    const uint16_t size = ti_GetSize(handle); const auto *data = static_cast<const uint8_t *>(ti_GetDataPtr(handle));
-    clevel::Error error; bool ok = false;
-    if (data) ok = catalog[catalog_index].kind == clevel::KIND_PACK
-        ? clevel::decode_pack_level(data, size, pack_level_index, loaded, error)
-        : clevel::decode_level(data, size, loaded, error);
-    else { error = clevel::Error::Truncated; }
+    const uint16_t size = ti_GetSize(handle);
+    const auto *data = static_cast<const uint8_t *>(ti_GetDataPtr(handle));
+    const uint8_t *payload = nullptr;
+    uint16_t payload_size = 0;
+    clevel::Error error = clevel::Error::Truncated;
+    bool ok = false;
+    if (payload_view(data, size, payload, payload_size)) {
+        ok = catalog[catalog_index].kind == clevel::KIND_PACK
+            ? clevel::decode_pack_level(payload, payload_size, pack_level_index, loaded, error)
+            : clevel::decode_level(payload, payload_size, loaded, error);
+    }
     ti_Close(handle);
     if (!ok) { set_error(clevel::error_string(error)); is_active = false; return false; }
     current_room = 0; active_catalog = catalog_index; active_pack_level = pack_level_index; is_active = true;

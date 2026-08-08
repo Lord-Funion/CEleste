@@ -57,7 +57,13 @@ void draw() {
     print("CUSTOM LEVELS", 32, 12, 11);
     const uint8_t count = custom_levels::catalog_size();
     if (!count) {
-        print("NO CELV APPVARS", 27, 51, 7);
+        const char *error = custom_levels::last_error();
+        if (error && error[0]) {
+            print("CELV FOUND, INVALID", 17, 43, 8);
+            print(error, 12, 58, 7);
+        } else {
+            print("NO CELV APPVARS", 27, 51, 7);
+        }
         print("MODE: BACK", 38, 103, 6);
         return;
     }
