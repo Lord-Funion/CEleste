@@ -74,6 +74,7 @@ enum type {
     MESSAGE = 86,
     BIG_CHEST = 96,
     FLAG = 118,
+    CLIMB_CHEST = 129,
     PLAYER
 };
 
@@ -235,6 +236,13 @@ public:
     int start;
     int timer;
     void update() override;
+};
+
+class ClimbChest : public Object {
+public:
+    ClimbChest(int x, int y);
+    void update() override;
+    void draw() override;
 };
 
 class Platform : public Object {

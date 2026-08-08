@@ -26,10 +26,10 @@ constexpr uint8_t PALETTE[] = {
     16,40,41,42,44,56,57,58,60,61,62,63,73,74,75,76,77,78,79,
     88,89,90,91,92,93,94,95,103,104,105,106,107,108,109,110,111,
     121,122,123,124,125,126,127,
-    8,11,12,18,20,22,23,26,28,64,86,96,118
+    8,11,12,18,20,22,23,26,28,64,86,96,118,129
 };
 
-constexpr uint8_t ENTITY_IDS[] = {8,11,12,18,20,22,23,26,28,64,86,96,118};
+constexpr uint8_t ENTITY_IDS[] = {8,11,12,18,20,22,23,26,28,64,86,96,118,129};
 
 constexpr uint8_t TILE_MASK[128] = {
   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -168,6 +168,7 @@ const char *logical_name(uint8_t id) {
         case 86: return "Memorial";
         case 96: return "Dash chest";
         case 118: return "Summit flag";
+        case 129: return "Climb chest";
         case 17: return "Spikes up";
         case 59: return "Spikes right";
         case 27: return "Spikes down";
@@ -408,6 +409,16 @@ void draw_2x2(uint8_t a, uint8_t b, uint8_t c, uint8_t d, int x, int y, uint8_t 
 }
 
 void draw_piece(uint8_t id, int x, int y, uint8_t rotation = 0) {
+    if(id == 129) {
+        draw_sprite(20, x, y, rotation);
+        gfx_SetColor(11);
+        gfx_SetPixel(x + 4, y + 3);
+        gfx_SetPixel(x + 3, y + 4);
+        gfx_SetPixel(x + 4, y + 4);
+        gfx_SetPixel(x + 5, y + 4);
+        gfx_SetPixel(x + 4, y + 5);
+        return;
+    }
     if(id == 64) {
         draw_2x2(64,65,80,81,x,y,rotation);
         return;
