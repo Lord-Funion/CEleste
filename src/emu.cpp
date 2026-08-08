@@ -229,10 +229,26 @@ gfx_rletsprite_t *render_map(int cell_x, int cell_y, uint8_t layers) {
     gfx_FillRectangle_NoClip(LCD_WIDTH / 2, 0, 128, 128);
     for(int y = 0; y < 16; y++) {
         for(int x = 0; x < 16; x++) {
-            uint8_t tile = mget(x + cell_x, y + cell_y);
+            const int map_x = x + cell_x;
+            const int map_y = y + cell_y;
+            uint8_t tile = mget(map_x, map_y);
+            uint8_t rotation = 0;
+            if(custom_levels::active() && map_x >= 0 && map_y >= 0) {
+                const uint8_t room_index = static_cast<uint8_t>((map_x / 16) + (map_y / 16) * 8);
+                rotation = custom_levels::tile_rotation(room_index,
+                    static_cast<uint8_t>(map_x % 16), static_cast<uint8_t>(map_y % 16));
+            }
             // I don't think this is how the PICO-8 actually handles the layers argument but whatevs
             if(tile && fget(tile, layers)) {
-                gfx_TransparentSprite_NoClip(atlas_tiles[tile], LCD_WIDTH / 2 + x * 8, y * 8);
+                if(rotation) {
+                    gfx_TempSprite(rotated_tile, 8, 8);
+                    if(rotation == 1) gfx_RotateSpriteC(atlas_tiles[tile], rotated_tile);
+                    else if(rotation == 2) gfx_RotateSpriteHalf(atlas_tiles[tile], rotated_tile);
+                    else gfx_RotateSpriteCC(atlas_tiles[tile], rotated_tile);
+                    gfx_TransparentSprite_NoClip(rotated_tile, LCD_WIDTH / 2 + x * 8, y * 8);
+                } else {
+                    gfx_TransparentSprite_NoClip(atlas_tiles[tile], LCD_WIDTH / 2 + x * 8, y * 8);
+                }
             }
         }
     }
@@ -290,6 +306,36 @@ void spr(uint8_t n, int x, int y, uint8_t w, uint8_t h, bool flip_x, bool flip_y
     }
     // todo: both?
     gfx_TransparentSprite(temp, SCREEN_X(x), SCREEN_Y(y));
+    profiler_end(spr);
+}
+
+void spr_rot(uint8_t n, int x, int y, uint8_t rotation, bool flip_x, bool flip_y) {
+    rotation &= 0x03u;
+    if(rotation == 0) {
+        spr(n, x, y, 1, 1, flip_x, flip_y);
+        return;
+    }
+    profiler_add(spr);
+    gfx_sprite_t *source = atlas_tiles[n];
+    gfx_TempSprite(temp_a, 8, 8);
+    gfx_TempSprite(temp_b, 8, 8);
+    if(rotation == 1) gfx_RotateSpriteC(source, temp_a);
+    else if(rotation == 2) gfx_RotateSpriteHalf(source, temp_a);
+    else gfx_RotateSpriteCC(source, temp_a);
+    gfx_sprite_t *current = temp_a;
+    if(flip_x) {
+        gfx_FlipSpriteX(current, temp_b);
+        current = temp_b;
+    }
+    if(flip_y) {
+        gfx_sprite_t *target = current == temp_a ? temp_b : temp_a;
+        gfx_FlipSpriteY(current, target);
+        current = target;
+    }
+    if(!default_pal) {
+        for(uint8_t i = 0; i < 64; i++) current->data[i] = pal_map[current->data[i] & 0xF];
+    }
+    gfx_TransparentSprite(current, SCREEN_X(x), SCREEN_Y(y));
     profiler_end(spr);
 }
 
