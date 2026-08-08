@@ -80,6 +80,11 @@ int covenant_notice_timer = 0;
 
 constexpr int TOTAL_STRAWBERRIES = 18;
 
+static void spr_child_rot(uint8_t sprite, int x, int y, int dx, int dy,
+                          uint8_t rotation, bool flip_x = false, bool flip_y = false);
+static void draw_rotated_2x2(uint8_t a, uint8_t b, uint8_t c, uint8_t d,
+                             int x, int y, uint8_t rotation);
+
 void _init(FILE *save) {
     custom_levels::initialize();
     custom_level_menu::initialize();
@@ -1766,7 +1771,7 @@ static void rotate_child_offset(int dx, int dy, uint8_t rotation, int &rx, int &
 }
 
 static void spr_child_rot(uint8_t sprite, int x, int y, int dx, int dy,
-                          uint8_t rotation, bool flip_x = false, bool flip_y = false) {
+                          uint8_t rotation, bool flip_x, bool flip_y) {
     int rx, ry;
     rotate_child_offset(dx, dy, rotation, rx, ry);
     spr_rot(sprite, x + rx, y + ry, rotation, flip_x, flip_y);

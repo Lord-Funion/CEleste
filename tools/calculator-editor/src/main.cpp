@@ -94,7 +94,7 @@ void erase_piece(){
   EditRoom &r=project.rooms[room_index];
   // Erasing any visible quadrant of a logical 2x2 object removes its anchor.
   for(int8_t dy=-1;dy<=1;dy++)for(int8_t dx=-1;dx<=1;dx++){int ax=int(cursor_x)+dx,ay=int(cursor_y)+dy;if(ax<0||ay<0||ax>=16||ay>=16)continue;uint8_t v=r.tiles[ay*16+ax];if((v==64||v==96)&&cursor_x>=ax&&cursor_x<=ax+1&&cursor_y>=ay&&cursor_y<=ay+1){paint_cell(ax,ay,0,0);return;}if(v==86&&cursor_x>=ax&&cursor_x<=ax+1&&cursor_y>=ay-1&&cursor_y<=ay){paint_cell(ax,ay,0,0);return;}}
-  paint(0);
+  paint_cell(cursor_x,cursor_y,0,0);
 }
 void undo(){if(!history_count)return;Change c=history[--history_count];project.rooms[c.room].tiles[c.index]=c.before;project.rooms[c.room].rotations[c.index]=c.before_rotation;if(redo_count<HISTORY_SIZE)redo_stack[redo_count++]=c;room_index=c.room;}
 void redo(){if(!redo_count)return;Change c=redo_stack[--redo_count];project.rooms[c.room].tiles[c.index]=c.after;project.rooms[c.room].rotations[c.index]=c.after_rotation;if(history_count<HISTORY_SIZE)history[history_count++]=c;room_index=c.room;}
@@ -154,9 +154,14 @@ int main(){
     if(pressed(1,kb_Mode)) palette_index=(palette_index+1)%(sizeof PALETTE);
     if(pressed(3,kb_Window)){
       EditRoom &r=project.rooms[room_index];const uint8_t index=cursor_y*16+cursor_x;
-      uint8_t here=r.tiles[index],rot=rotate_id(here);
-      if(here&&rot!=here){record_change(index,here,rot);r.tiles[index]=rot;set_notice("PIECE ROTATED");}
-      else {uint8_t sel=PALETTE[palette_index],next=rotate_id(sel);int pi=palette_index_for(next);if(next!=sel&&pi>=0){palette_index=static_cast<uint8_t>(pi);set_notice("PALETTE ROTATED");}else set_notice("NO ROTATION");}
+      if(r.tiles[index]){
+        const uint8_t before=r.rotations[index],after=static_cast<uint8_t>((before+1)&3);
+        record_change(index,r.tiles[index],r.tiles[index],before,after);r.rotations[index]=after;
+        set_notice(after==0?"PIECE ROTATION 0":after==1?"PIECE ROTATION 90":after==2?"PIECE ROTATION 180":"PIECE ROTATION 270");
+      }else{
+        placement_rotation=static_cast<uint8_t>((placement_rotation+1)&3);
+        set_notice(placement_rotation==0?"PALETTE ROTATION 0":placement_rotation==1?"PALETTE ROTATION 90":placement_rotation==2?"PALETTE ROTATION 180":"PALETTE ROTATION 270");
+      }
     }
     if(pressed(6,kb_Add)&&room_index+1<project.room_count) room_index++;
     if(pressed(6,kb_Sub)&&room_index) room_index--;
