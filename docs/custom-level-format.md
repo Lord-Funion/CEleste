@@ -99,6 +99,7 @@ Supported gameplay IDs include:
 | 86 | Memorial/message |
 | 96 | Big/dash-upgrade chest |
 | 118 | Summit flag |
+| 129 | Climb Chest (unlocks MATH wall-grab/climbing with stamina) |
 
 Multi-sprite entities remain one logical record. For example, one type-64 record renders the complete fake wall and one type-96 record renders the complete big chest.
 
@@ -131,6 +132,7 @@ All supported custom graphics can be rendered at the four quarter-turn orientati
 - Locked chests retain key/chest behavior at every orientation.
 - Fake-wall strawberry options and big-chest dash-count options remain independent from orientation.
 - Other objects keep their ordinary gameplay semantics unless the runtime explicitly defines a directional semantic for that object. Rotation can therefore be graphical for objects whose original mechanics are not orientation-dependent.
+- The Climb Chest (`129`) is a custom power-up entity. Touching it unlocks modern-Celeste-style wall grabbing for the remainder of that custom level: hold `MATH` against a non-ice wall, use Up/Down to climb, and manage the 110-point stamina pool. Ground contact restores stamina.
 
 Rooms complete only when Madeline exits through the top edge. The summit flag is not the standard room-completion trigger.
 

@@ -29,7 +29,12 @@ insert_after("src/classic.cpp", "void _init(FILE *save) {\n", "    custom_levels
 insert_after("src/classic.cpp", "void title_screen() {\n", "    custom_levels::unload();\n")
 replace("src/classic.cpp", "bool is_title() {\n    return level_index() == 31;\n}\n", "bool is_title() {\n    return !custom_levels::active() && level_index() == 31;\n}\n")
 replace("src/classic.cpp", "    if(y < -4 and level_index() < 30) {\n", "    if(y < -4 and (custom_levels::active() or level_index() < 30)) {\n")
-replace("src/classic.cpp", "void next_room() {\n    if(room.x == 2 and room.y == 1) {\n", "void next_room() {\n    if(custom_levels::active()) {\n        if(custom_levels::next_room()) {\n            const uint8_t index = custom_levels::room_index();\n            load_room(index % 8, index / 8);\n        } else if(custom_levels::next_level()) {\n            load_room(0, 0);\n        } else {\n            title_screen();\n        }\n        return;\n    }\n    if(room.x == 2 and room.y == 1) {\n")
+classic = (ROOT / "src/classic.cpp").read_text()
+# The custom-level next-room block may contain additional behavior (for example,
+# resetting per-level power-ups when advancing to the next level in a pack).
+# Presence of the custom-level branch is sufficient to prove this hook is integrated.
+if "void next_room() {\n    if(custom_levels::active()) {" not in classic:
+    replace("src/classic.cpp", "void next_room() {\n    if(room.x == 2 and room.y == 1) {\n", "void next_room() {\n    if(custom_levels::active()) {\n        if(custom_levels::next_room()) {\n            const uint8_t index = custom_levels::room_index();\n            load_room(index % 8, index / 8);\n        } else if(custom_levels::next_level()) {\n            load_room(0, 0);\n        } else {\n            title_screen();\n        }\n        return;\n    }\n    if(room.x == 2 and room.y == 1) {\n")
 replace("src/classic.cpp", "void prev_room() {\n    if(level_index() < 1) return;\n", "void prev_room() {\n    if(custom_levels::active()) {\n        if(custom_levels::previous_room()) {\n            const uint8_t index = custom_levels::room_index();\n            load_room(index % 8, index / 8);\n        }\n        return;\n    }\n    if(level_index() < 1) return;\n")
 replace("src/classic.cpp", "    if(practice_mode && level_index() != 30) {\n", "    if(!custom_levels::active() && practice_mode && level_index() != 30) {\n")
 classic = (ROOT / "src/classic.cpp").read_text()

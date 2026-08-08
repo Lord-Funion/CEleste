@@ -58,6 +58,12 @@ int minutes;
 uint8_t new_game_plus = 0;
 bool test_mode = false; // Test runs never overwrite normal progress.
 bool unlimited_dashes = false; // Session-only: deliberately excluded from saves.
+bool climb_enabled = false;       // Custom-level Climb Chest power-up.
+int climb_stamina = 1100;          // 110.0 stamina, stored in tenths.
+constexpr int CLIMB_STAMINA_MAX = 1100;
+constexpr int CLIMB_HANG_COST = 4;
+constexpr int CLIMB_UP_COST = 15;
+constexpr int CLIMB_JUMP_COST = 275;
 
 constexpr kb_lkey_t TEST_MODE_SEQUENCE[] = {
         kb_Key8, kb_KeySin, kb_KeyLog, kb_KeySquare, kb_KeyLn, kb_Key2nd
@@ -122,6 +128,8 @@ void title_screen() {
     frames = 0;
     deaths = 0;
     max_dash = 1;
+    climb_enabled = false;
+    climb_stamina = CLIMB_STAMINA_MAX;
     new_game_plus = 0;
     test_mode = false;
     start_game = false;
@@ -147,6 +155,8 @@ void begin_new_game_plus(bool from_test_mode) {
     minutes = 0;
     deaths = 0;
     max_dash = 2;
+    climb_enabled = false;
+    climb_stamina = CLIMB_STAMINA_MAX;
     new_game_plus = 1;
     test_mode = from_test_mode;
     new_bg = false;
@@ -308,6 +318,7 @@ void Player::update() {
 
     if(on_ground) {
         grace = 6;
+        if(climb_enabled) climb_stamina = CLIMB_STAMINA_MAX;
         if(djump < max_dash) {
             //psfx(54);
             djump = max_dash;
@@ -324,6 +335,40 @@ void Player::update() {
         spd.y = appr(spd.y, dash_target.y, dash_accel.y);
     } else {
 
+        // Optional modern-Celeste-style climbing, unlocked by the custom Climb Chest.
+        // MATH is the grab button. Ice walls deliberately cannot be climbed.
+        int climb_wall = 0;
+        if(climb_enabled && !on_ground && !dash && kb_IsDown(kb_KeyMath) && climb_stamina > 0) {
+            if(is_solid(-3, 0) && !is_ice(-3, 0)) climb_wall = -1;
+            else if(is_solid(3, 0) && !is_ice(3, 0)) climb_wall = 1;
+        }
+        bool climbing = climb_wall != 0;
+
+        if(climbing && jbuffer > 0) {
+            jbuffer = 0;
+            climb_stamina = max(0, climb_stamina - CLIMB_JUMP_COST);
+            spd.y = SP(-2);
+            spd.x = -climb_wall * SP(2);
+            new Smoke(x + climb_wall * 6, y);
+            climbing = false;
+        }
+
+        if(climbing) {
+            spd.x = 0;
+            flip.x = climb_wall < 0;
+            if(btn(k_up)) {
+                spd.y = SP(-0.8);
+                climb_stamina = max(0, climb_stamina - CLIMB_UP_COST);
+            } else if(btn(k_down)) {
+                spd.y = SP(0.8);
+            } else {
+                spd.y = 0;
+                climb_stamina = max(0, climb_stamina - CLIMB_HANG_COST);
+            }
+            if(climb_stamina == 0) climbing = false;
+        }
+
+        if(!climbing) {
         // move
         subpixel maxrun = SP(1);
         subpixel accel = SP(0.6);
@@ -442,6 +487,7 @@ void Player::update() {
             //psfx(9);
             new Smoke(x, y);
         }
+        } // !climbing
 
     }
 
@@ -937,6 +983,29 @@ void Chest::update() {
     }
 }
 
+ClimbChest::ClimbChest(int x, int y) : Object(x, y) {
+    type = CLIMB_CHEST;
+    sprite = CHEST;
+    solids = false;
+}
+
+void ClimbChest::update() {
+    Player *hit = collide_player(0, 0);
+    if(hit == nullptr) return;
+    climb_enabled = true;
+    climb_stamina = CLIMB_STAMINA_MAX;
+    if(custom_levels::active()) custom_levels::collect_source(custom_levels::room_index(), custom_source);
+    new Smoke(x, y);
+    freeze = 4;
+    shake = 6;
+    delete this;
+}
+
+void ClimbChest::draw() {
+    spr_rot(CHEST, x, y, custom_rotation);
+    draw_plus(x + 4, y + 4, 11);
+}
+
 Platform::Platform(int x, int y, int dir) : Object(x, y) {
     x -= 4;
     solids = false;
@@ -1216,6 +1285,9 @@ Object *init_object(type type, int x, int y, uint8_t flags, uint8_t source) {
         case CHEST:
             object = (custom && (gameplay_flags & 0x01u)) || !source_done ? new Chest(x, y) : nullptr;
             break;
+        case CLIMB_CHEST:
+            object = custom && !source_done ? new ClimbChest(x, y) : nullptr;
+            break;
         case PLATFORM: object = new Platform(x, y, -1); break;
         case PLATFORM_RIGHT: object = new Platform(x, y, 1); break;
         case MESSAGE: object = new Message(x, y); break;
@@ -1406,6 +1478,8 @@ void next_room() {
             const uint8_t index = custom_levels::room_index();
             load_room(index % 8, index / 8);
         } else if(custom_levels::next_level()) {
+            climb_enabled = false;
+            climb_stamina = CLIMB_STAMINA_MAX;
             load_room(0, 0);
         } else {
             title_screen();
@@ -1726,10 +1800,17 @@ void _draw() {
     // credits
     if(is_title()) {
         print("2nd+alpha", 46, 72, 5);
-        print("maddy thorson", 40, 84, 5);
-        print("noel berry", 46, 90, 5);
-        print("ce port:", 48, 102, 5);
-        print("john cesarz", 42, 108, 5);
+        print("mode: custom levels", 29, 78, 5);
+        print("maddy thorson", 40, 90, 5);
+        print("noel berry", 46, 96, 5);
+        print("ce port:", 48, 108, 5);
+        print("john cesarz", 42, 114, 5);
+    }
+
+    if(climb_enabled && !is_title() && (kb_IsDown(kb_KeyMath) || climb_stamina < CLIMB_STAMINA_MAX)) {
+        rectfill(104, 4, 124, 8, 0);
+        const int width = climb_stamina * 19 / CLIMB_STAMINA_MAX;
+        if(width > 0) rectfill(105, 5, 105 + width - 1, 7, climb_stamina < 275 ? 8 : 11);
     }
 
     if(test_mode_notice_timer > 0) {

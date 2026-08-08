@@ -50,6 +50,7 @@ Custom levels use the original CEleste/Celeste Classic gameplay objects, includi
 - moving platforms;
 - the complete memorial/message object;
 - complete 16×16 big/dash-upgrade chests;
+- the Climb Chest, which unlocks `MATH`-held wall grabbing/climbing with Celeste-style stamina;
 - the summit flag.
 
 Multi-sprite objects are represented as one logical entity. Authors do not need to place internal companion quadrants such as fake-wall, memorial, or big-chest sprite fragments manually.
