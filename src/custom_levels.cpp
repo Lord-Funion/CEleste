@@ -95,6 +95,11 @@ uint8_t tile(uint8_t room, uint8_t x, uint8_t y) {
     return loaded.rooms[room].tiles[y * 16 + x];
 }
 
+uint8_t tile_rotation(uint8_t room, uint8_t x, uint8_t y) {
+    if (!is_active || room >= loaded.room_count || x >= 16 || y >= 16) return 0;
+    return static_cast<uint8_t>(loaded.rooms[room].rotations[y * 16 + x] & 0x03u);
+}
+
 bool fruit_collected(uint8_t room) { return is_active && room < loaded.room_count && collected_fruit[room]; }
 void collect_fruit(uint8_t room) { if (is_active && room < loaded.room_count) collected_fruit[room] = true; }
 
@@ -118,12 +123,9 @@ bool key_needed(uint8_t room) {
         const clevel::Entity &entity = r.entities[i];
         if (entity.type != 20) continue;
         saw_chest = true;
-        // Empty chests do not mark a collectible source, so they require a key
-        // again after each death/restart. Strawberry chests disappear once
-        // their own source strawberry has been collected.
-        if ((entity.flags & 0x01u) != 0 || !source_collected(room, i)) return true;
+        // Low flag bit 0 is the gameplay option. High bits 6-7 are rotation.
+        if ((clevel::entity_gameplay_flags(entity) & 0x01u) != 0 || !source_collected(room, i)) return true;
     }
-    // A deliberately placed key with no chest is still allowed to appear.
     return !saw_chest;
 }
 

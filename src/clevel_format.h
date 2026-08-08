@@ -5,11 +5,17 @@
 
 namespace clevel {
 
-constexpr uint8_t FORMAT_VERSION = 1;
+constexpr uint8_t FORMAT_VERSION = 2;
+constexpr uint8_t MIN_FORMAT_VERSION = 1;
 constexpr uint8_t KIND_LEVEL = 1;
 constexpr uint8_t KIND_PACK = 2;
 constexpr std::size_t HEADER_SIZE = 34;
 constexpr std::size_t ROOM_TILE_COUNT = 256;
+constexpr std::size_t ROTATION_PLANE_BYTES = ROOM_TILE_COUNT / 4;
+constexpr uint8_t ROTATION_ENCODING_2BPP = 1;
+constexpr uint8_t ENTITY_ROTATION_SHIFT = 6;
+constexpr uint8_t ENTITY_ROTATION_MASK = 0xC0;
+constexpr uint8_t ENTITY_FLAG_MASK = 0x3F;
 constexpr std::size_t MAX_ROOMS = 32;
 constexpr std::size_t MAX_ENTITIES_PER_ROOM = 48;
 constexpr std::size_t MAX_TITLE = 63;
@@ -23,6 +29,14 @@ struct Entity {
     uint8_t flags;
 };
 
+inline uint8_t entity_rotation(const Entity &entity) {
+    return static_cast<uint8_t>((entity.flags & ENTITY_ROTATION_MASK) >> ENTITY_ROTATION_SHIFT);
+}
+
+inline uint8_t entity_gameplay_flags(const Entity &entity) {
+    return static_cast<uint8_t>(entity.flags & ENTITY_FLAG_MASK);
+}
+
 struct Room {
     uint32_t id;
     uint8_t width;
@@ -33,6 +47,9 @@ struct Room {
     uint8_t exit_y;
     uint8_t flags;
     uint8_t tiles[ROOM_TILE_COUNT];
+    // Quarter-turns clockwise for each tile: 0, 1, 2, or 3.
+    // CELV v1 rooms decode to all zeroes.
+    uint8_t rotations[ROOM_TILE_COUNT];
     uint8_t entity_count;
     Entity entities[MAX_ENTITIES_PER_ROOM];
 };
@@ -75,6 +92,7 @@ enum class Error : uint8_t {
     TooManyRooms,
     InvalidRoomSize,
     BadRle,
+    BadRotationData,
     TooManyEntities,
     RoomLengthMismatch,
     PackIndexOutOfRange,

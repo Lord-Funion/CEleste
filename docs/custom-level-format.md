@@ -1,27 +1,19 @@
-# CEleste Custom-Level Format (`CELV`) v1
+# CEleste Custom-Level Format (`CELV`) v2
 
 This document specifies the binary payload stored inside a TI-84 Plus CE AppVar. When transferred to a computer, the AppVar is represented by a standard `.8xv` file. The outer `.8xv` wrapper is not part of the `CELV` payload.
 
-All integers are unsigned and little-endian. All text is printable ASCII. Exporters must reject or replace unsupported characters. Unless explicitly stated otherwise, lengths are byte counts.
+All integers are unsigned and little-endian. All text is printable ASCII. Unless stated otherwise, lengths are byte counts.
 
-## Design goals
-
-- Deterministic output: unchanged projects produce byte-identical payloads.
-- Bounds-checkable parsing on calculator hardware.
-- Single levels and ordered level packs use the same container.
-- Normal campaign data remains compiled into CEleste and is never overwritten.
-- Unknown versions or malformed records are rejected before gameplay.
-- The calculator can read the payload directly from RAM or archive through `fileioc`.
-- Terrain and logical gameplay entities remain separate, so compound objects do not need to be assembled from internal sprite fragments.
+**Compatibility:** current CEleste reads both CELV v1 and CELV v2. Current editors export v2. A v1 room is interpreted exactly as before with every tile/entity rotation set to 0°.
 
 ## Payload header
 
-The fixed header is 34 bytes.
+The fixed header remains 34 bytes.
 
 | Offset | Size | Field | Description |
 |---:|---:|---|---|
 | 0 | 4 | magic | ASCII `CELV` |
-| 4 | 1 | version | `1` |
+| 4 | 1 | version | `2` for current exports; runtime also accepts `1` |
 | 5 | 1 | kind | `1` = level, `2` = pack |
 | 6 | 2 | flags | Reserved; write zero |
 | 8 | 4 | total length | Entire payload length, including header |
@@ -33,49 +25,70 @@ The fixed header is 34 bytes.
 | 24 | 1 | title length | Maximum 63 |
 | 25 | 1 | author length | Maximum 31 |
 | 26 | 2 | description length | Maximum 255 |
-| 28 | 2 | minimum game version | BCD-like major/minor, currently `0x0100` |
+| 28 | 2 | minimum game version | Current v2 exporters write `0x0101` |
 | 30 | 4 | reserved | Write zero |
 
-Immediately after the header are the title, author, and description bytes, with no terminators.
+Immediately after the header are title, author, and description bytes with no terminators.
 
-## Level records
+## Level room records
 
-A level's item count is its room count. Version 1 requires at least one room and supports up to 32 in the portable format.
+A level contains 1–32 rooms. Current calculator gameplay requires 16×16 rooms.
 
-Each room starts with a 2-byte `record length`. This length counts the bytes after the length field and allows a parser to skip a future extended record.
+Each room begins with a 2-byte `record length` counting the bytes after that length field.
 
 | Field | Size | Description |
 |---|---:|---|
-| width | 1 | Version 1 runtime requires 16 |
-| height | 1 | Version 1 runtime requires 16 |
+| width | 1 | Current runtime requires 16 |
+| height | 1 | Current runtime requires 16 |
 | spawn X/Y | 2 | Player-spawn cell |
-| exit X/Y | 2 | Legacy/suggested exit metadata; gameplay completion still requires leaving through the top |
+| exit X/Y | 2 | Legacy/suggested metadata; room completion is still crossing the top edge |
 | flags | 1 | Reserved |
-| reserved | 1 | Zero |
+| rotation encoding | 1 | v2: `1` = packed 2-bits-per-cell rotation plane; `0` = all rotations zero |
 | compressed tile length | 2 | Byte length of RLE stream |
 | entity count | 2 | Number of entity records |
 | room ID | 4 | Stable room identifier |
-| tile RLE | variable | Count/value byte pairs |
-| entities | `count x 4` | Type, X, Y, flags |
+| tile RLE | variable | Count/value pairs |
+| tile rotation plane | 64 bytes when encoding = 1 | Four 2-bit rotation values per byte |
+| entities | `count × 4` | Type, X, Y, flags |
 
-### Tile RLE
+### Terrain tile plane
 
-Tiles are flattened row-major. A 16×16 room expands to exactly 256 bytes. Each pair is a one-byte run count from 1 through 255 followed by a one-byte tile ID.
+Tiles are flattened row-major. A 16×16 room expands to exactly 256 tile IDs. Each RLE pair is a one-byte run count (1–255) followed by a one-byte PICO-8 atlas tile ID.
 
-A decoder must reject zero-length runs, odd-length streams, overflow beyond the room area, or streams that do not expand to exactly 256 bytes.
+Gameplay entities are not written into this plane by current editors.
 
-Current exporters write **terrain/map tiles only** to this plane. Gameplay entities are encoded in the entity list below. This prevents an entity sprite ID from accidentally receiving terrain collision or layer behavior.
+### Tile rotation plane
 
-### Entities
+CELV v2 stores rotation independently from tile ID. This is what allows **any atlas tile to rotate even when no separate counterpart ID exists**.
 
-Entity records are four bytes: `type`, `x`, `y`, and `flags`. Version 1 uses the existing CEleste/PICO-8 gameplay IDs:
+Each cell has a 2-bit clockwise quarter-turn value:
+
+| Value | Rotation |
+|---:|---:|
+| 0 | 0° |
+| 1 | 90° clockwise |
+| 2 | 180° |
+| 3 | 270° clockwise |
+
+Four cells are packed into each byte. For flattened cell index `i`, its two bits are stored at:
+
+`(rotationByte[i >> 2] >> ((i & 3) * 2)) & 3`
+
+A 16×16 room therefore uses exactly 64 bytes. CEleste uses CEdev graphx rotation routines at runtime to transform the original atlas sprite; exporters do not need to manufacture new sprite IDs.
+
+CELV v1 has no rotation plane and decodes as 256 zero rotation values.
+
+## Entities
+
+Each entity remains four bytes: `type`, `x`, `y`, `flags`.
+
+Supported gameplay IDs include:
 
 | ID | Object |
 |---:|---|
-| 1 | Player spawn; normally represented by spawn coordinates instead |
 | 8 | Key |
-| 11 | Moving platform, left |
-| 12 | Moving platform, right |
+| 11 | Moving platform |
+| 12 | Moving platform/right variant |
 | 18 | Spring |
 | 20 | Locked chest |
 | 22 | Dash balloon |
@@ -87,74 +100,70 @@ Entity records are four bytes: `type`, `x`, `y`, and `flags`. Version 1 uses the
 | 96 | Big/dash-upgrade chest |
 | 118 | Summit flag |
 
-The calculator runtime instantiates entity records directly and passes the `flags` byte to the gameplay object. Multi-sprite entities are logical pieces: for example, one type-64 entity creates the complete 16×16 fake wall and one type-96 entity creates the complete 16×16 big chest. Companion sprites are rendering details and are not separate CELV entities.
+Multi-sprite entities remain one logical record. For example, one type-64 record renders the complete fake wall and one type-96 record renders the complete big chest.
 
-#### Entity flag meanings used by v1.0.0
+### Entity flags and rotation
 
-Unlisted bits are reserved and exporters should write them as zero.
+CELV v2 divides the existing flag byte into gameplay bits and rotation bits:
 
-| Entity | Bit | Meaning when set |
+- bits **0–5** (`0x3F`) = gameplay options;
+- bits **6–7** (`0xC0`) = clockwise quarter-turn rotation.
+
+Rotation is decoded as `(flags >> 6) & 3`, using the same 0/90/180/270° values as terrain.
+
+Gameplay options currently used:
+
+| Entity | Gameplay bit | Meaning when set |
 |---|---:|---|
-| Locked chest (`20`) | 0 (`0x01`) | Empty chest; do not spawn a strawberry after unlocking |
-| Fake wall (`64`) | 0 (`0x01`) | Empty fake wall; do not spawn a strawberry when broken |
-| Big chest (`96`) | 1 (`0x02`) | Upgrade to three dashes instead of the default two |
+| Locked chest (`20`) | 0 (`0x01`) | Empty chest; do not spawn a strawberry |
+| Fake wall (`64`) | 0 (`0x01`) | Empty wall; do not spawn a strawberry |
+| Big chest (`96`) | 1 (`0x02`) | Upgrade to three dashes instead of two |
 
-Therefore the original/default Celeste behavior uses `flags = 0`: locked chests and fake walls contain strawberries, and big chests upgrade Madeline to two dashes.
+For example, a locked chest rotated 90° with its normal strawberry behavior uses flags `0x40`. An empty locked chest rotated 90° uses `0x41`.
 
-Keys use the original room-level `has_key` behavior: collecting a key unlocks locked chests in that room. Dash balloons refill the currently available maximum dash count. Rooms still advance only when Madeline crosses the top edge; touching the summit flag does not complete an ordinary custom room.
+The runtime masks rotation bits away before reading gameplay options, so rotating a chest does not change whether it requires a key or contains a strawberry.
 
-Current Studio validation also treats compound objects as complete footprints:
+## Gameplay semantics of rotation
 
-- fake wall: 2×2 cells anchored at its top-left;
-- big chest: 2×2 cells anchored at its top-left;
-- memorial/message: 2×2 visual footprint with entity anchor at the lower-left;
-- moving platform: two cells wide.
+All supported custom graphics can be rendered at the four quarter-turn orientations.
+
+- Directional spike collision is rotated to match the rendered spike direction.
+- Locked chests retain key/chest behavior at every orientation.
+- Fake-wall strawberry options and big-chest dash-count options remain independent from orientation.
+- Other objects keep their ordinary gameplay semantics unless the runtime explicitly defines a directional semantic for that object. Rotation can therefore be graphical for objects whose original mechanics are not orientation-dependent.
+
+Rooms complete only when Madeline exits through the top edge. The summit flag is not the standard room-completion trigger.
 
 ## Pack records
 
-A pack's item count is its number of levels. After pack metadata, each nested level is encoded as a 4-byte nested payload length followed by one complete `CELV` level payload.
-
-Nested pack payloads are invalid. Every nested level carries its own CRC32 and metadata. This permits extraction without rewriting the level.
+A pack's item count is its number of levels. After pack metadata, each nested level is encoded as a 4-byte payload length followed by one complete `CELV` level payload. Current exports nest v2 level payloads. The parser may also encounter v1 nested levels and handles them as unrotated.
 
 ## `.8xv` wrapper
 
-The computer editor writes a standard TI-83/84 variable file:
+The computer editor writes a standard TI-83/84 variable file with:
 
 - signature `**TI83F*`;
 - secondary signature `1A 0A 00`;
-- 42-byte comment;
-- one variable entry with type `0x15` (AppVar);
-- 8-character calculator variable name;
-- archived flag `0x80` by default;
-- AppVar data consisting of a 2-byte payload length followed by the `CELV` payload;
-- 16-bit additive checksum over the TI data section.
+- one type-`0x15` AppVar entry;
+- an 8-character variable name;
+- archive flag `0x80` by default;
+- two-byte AppVar payload length followed by the `CELV` payload;
+- the standard 16-bit additive TI data-section checksum.
 
-The computer implementation validates the outer TI checksum and inner CRC32 independently.
+The outer TI checksum and inner CELV CRC32 are validated independently.
 
-## Variable naming
+## Limits and validation
 
-Recommended names are:
+Current implementations reject or report:
 
-- single level: `CL` plus a stable base-36 ID, truncated to 8 characters;
-- pack: `CP` plus a stable base-36 ID, truncated to 8 characters.
-
-Names contain only uppercase ASCII letters and digits. Importers must not rely on the variable name for identity; use the payload ID.
-
-## Limits and security
-
-Parsers/exporters must reject or flag:
-
-- payloads shorter than 34 bytes;
-- incorrect magic, unsupported version, or unsupported kind;
+- incorrect magic, unsupported versions/kinds, or truncation;
 - total-length or CRC mismatch;
-- metadata exceeding the documented limits;
-- zero or excessive room counts;
-- non-16×16 rooms in the current calculator runtime;
-- invalid RLE;
-- entities or compound footprints outside room bounds;
-- overlapping logical gameplay footprints;
-- excessive entity counts (the calculator runtime supports 48 per room);
-- truncated nested levels;
-- trailing bytes not accounted for by records.
+- metadata over documented limits;
+- invalid room counts or non-16×16 calculator rooms;
+- malformed RLE;
+- invalid rotation encoding/data;
+- more than 48 gameplay entities per room;
+- compound pieces outside room bounds or overlapping another logical gameplay footprint;
+- malformed nested pack entries or unexplained trailing bytes.
 
-The current computer exporter uses a conservative 65,000-byte payload limit. A calculator build may impose a lower practical limit based on available RAM.
+The Studio exporter uses a conservative 65,000-byte AppVar payload limit.

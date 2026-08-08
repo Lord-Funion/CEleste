@@ -1,0 +1,34 @@
+name: Cleanup merged work branches
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Delete merged agent branches
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin '+refs/heads/*:refs/remotes/origin/*'
+          while IFS= read -r ref; do
+            branch="${ref#origin/}"
+            case "$branch" in
+              agent/*|assistant/*) ;;
+              *) continue ;;
+            esac
+            if git merge-base --is-ancestor "origin/$branch" origin/master; then
+              echo "Deleting merged branch $branch"
+              git push origin --delete "$branch"
+            else
+              echo "Keeping unmerged branch $branch"
+            fi
+          done < <(git for-each-ref --format='%(refname:short)' refs/remotes/origin/)

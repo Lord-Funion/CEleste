@@ -80,6 +80,11 @@ int covenant_notice_timer = 0;
 
 constexpr int TOTAL_STRAWBERRIES = 18;
 
+static void spr_child_rot(uint8_t sprite, int x, int y, int dx, int dy,
+                          uint8_t rotation, bool flip_x = false, bool flip_y = false);
+static void draw_rotated_2x2(uint8_t a, uint8_t b, uint8_t c, uint8_t d,
+                             int x, int y, uint8_t rotation);
+
 void _init(FILE *save) {
     custom_levels::initialize();
     custom_level_menu::initialize();
@@ -666,8 +671,8 @@ void Balloon::update() {
 
 void Balloon::draw() {
     if(sprite == 22) {
-        spr(13 + sprite_tmr / 8, x, y + 6);
-        spr(sprite, x, y);
+        spr_child_rot(13 + sprite_tmr / 8, x, y, 0, 6, custom_rotation);
+        spr_rot(sprite, x, y, custom_rotation);
     }
 }
 
@@ -706,9 +711,9 @@ void FallFloor::update() {
 void FallFloor::draw() {
     if(state != 2) {
         if(state != 1) {
-            spr(23, x, y);
+            spr_rot(23, x, y, custom_rotation);
         } else {
-            spr(23 + (15 - delay) / 5, x, y);
+            spr_rot(23 + (15 - delay) / 5, x, y, custom_rotation);
         }
     }
 }
@@ -826,9 +831,9 @@ void FlyFruit::draw() {
     } else {
         off = (off + 1) % 12;
     }
-    spr(45 + off / 4, x - 6, y - 2, 1, 1, true, false);
-    spr(sprite, x, y);
-    spr(45 + off / 4, x + 6, y - 2);
+    spr_child_rot(45 + off / 4, x, y, -6, -2, custom_rotation, true, false);
+    spr_rot(sprite, x, y, custom_rotation);
+    spr_child_rot(45 + off / 4, x, y, 6, -2, custom_rotation);
 }
 
 LifeUp::LifeUp(int x, int y) : Object(x, y) {
@@ -882,10 +887,7 @@ void FakeWall::update() {
 }
 
 void FakeWall::draw() {
-    spr(64, x, y);
-    spr(65, x + 8, y);
-    spr(80, x, y + 8);
-    spr(81, x + 8, y + 8);
+    draw_rotated_2x2(64, 65, 80, 81, x, y, custom_rotation);
 }
 
 Key::Key(int x, int y) : Object(x, y) {
@@ -961,8 +963,8 @@ void Platform::update() {
 }
 
 void Platform::draw() {
-    spr(11, x, y - 1);
-    spr(12, x + 8, y - 1);
+    spr_child_rot(11, x, y - 1, 0, 0, custom_rotation);
+    spr_child_rot(12, x, y - 1, 8, 0, custom_rotation);
 }
 
 Message::Message(int x, int y) : Object(x, y) {
@@ -976,10 +978,7 @@ void Message::draw() {
     // entity, so draw the complete sign here instead of requiring authors
     // to assemble companion sprite fragments by hand.
     if(custom_levels::active()) {
-        spr(70, x, y - 8);
-        spr(71, x + 8, y - 8);
-        spr(86, x, y);
-        spr(87, x + 8, y);
+        draw_rotated_2x2(70, 71, 86, 87, x, y - 8, custom_rotation);
     }
     const char *text = "-- celeste mountain --#this memorial to those# perished on the climb";
     if(check_player(4, 0)) {
@@ -1028,8 +1027,8 @@ void BigChest::draw() {
             timer = 60;
             chest_particle_count = 0;
         }
-        spr(96, x, y);
-        spr(97, x + 8, y);
+        spr_child_rot(96, x, y, 0, 0, custom_rotation);
+        spr_child_rot(97, x, y, 8, 0, custom_rotation);
     } else if(state == 1) {
         timer -= 1;
         shake = 5;
@@ -1060,8 +1059,8 @@ void BigChest::draw() {
             vert_line(x + PIX(p.x), y + 8 - PIX(p.y), min(y + 8 - PIX(p.y) + p.h, y + 8), 7);
         }
     }
-    spr(112, x, y + 8);
-    spr(113, x + 8, y + 8);
+    spr_child_rot(112, x, y, 0, 8, custom_rotation);
+    spr_child_rot(113, x, y, 8, 8, custom_rotation);
 }
 
 Orb::Orb(int x, int y, uint8_t target_dashes) : Object(x, y) {
@@ -1111,7 +1110,7 @@ bool show_new_game_plus_prompt(int score) {
 
 void Flag::draw() {
     sprite = 118 + (frames / 5) % 3;
-    spr(sprite, x, y);
+    spr_rot(sprite, x, y, custom_rotation);
     if(show) {
         bool show_prompt = show_new_game_plus_prompt(score);
         int results_bottom = show_prompt ? 39 : 31;
@@ -1192,6 +1191,8 @@ void RoomTitle::draw() {
 
 Object *init_object(type type, int x, int y, uint8_t flags, uint8_t source) {
     const bool custom = custom_levels::active();
+    const uint8_t gameplay_flags = static_cast<uint8_t>(flags & clevel::ENTITY_FLAG_MASK);
+    const uint8_t rotation = static_cast<uint8_t>((flags & clevel::ENTITY_ROTATION_MASK) >> clevel::ENTITY_ROTATION_SHIFT);
     const bool source_done = custom
         ? custom_levels::source_collected(custom_levels::room_index(), source)
         : got_fruit[level_index()];
@@ -1205,7 +1206,7 @@ Object *init_object(type type, int x, int y, uint8_t flags, uint8_t source) {
         case FRUIT: object = source_done ? nullptr : new Fruit(x, y); break;
         case FLY_FRUIT: object = source_done ? nullptr : new FlyFruit(x, y); break;
         case FAKE_WALL:
-            object = (custom && (flags & 0x01u)) || !source_done ? new FakeWall(x, y) : nullptr;
+            object = (custom && (gameplay_flags & 0x01u)) || !source_done ? new FakeWall(x, y) : nullptr;
             break;
         case KEY:
             object = custom
@@ -1213,7 +1214,7 @@ Object *init_object(type type, int x, int y, uint8_t flags, uint8_t source) {
                 : (source_done ? nullptr : new Key(x, y));
             break;
         case CHEST:
-            object = (custom && (flags & 0x01u)) || !source_done ? new Chest(x, y) : nullptr;
+            object = (custom && (gameplay_flags & 0x01u)) || !source_done ? new Chest(x, y) : nullptr;
             break;
         case PLATFORM: object = new Platform(x, y, -1); break;
         case PLATFORM_RIGHT: object = new Platform(x, y, 1); break;
@@ -1222,7 +1223,11 @@ Object *init_object(type type, int x, int y, uint8_t flags, uint8_t source) {
         case FLAG: object = new Flag(x, y); break;
         default: return nullptr;
     }
-    if(object) { object->custom_flags = flags; object->custom_source = source; }
+    if(object) {
+        object->custom_flags = gameplay_flags;
+        object->custom_rotation = rotation;
+        object->custom_source = source;
+    }
     return object;
 }
 
@@ -1237,6 +1242,7 @@ Object::Object(int x, int y) {
     this->y = y;
     hitbox = {.x=0, .y=0, .w=8, .h=8};
     custom_flags = 0;
+    custom_rotation = 0;
     custom_source = 0xFF;
 
     spd = {.x=0, .y=0};
@@ -1755,8 +1761,39 @@ void _draw() {
     profiler_end(draw);
 }
 
+static void rotate_child_offset(int dx, int dy, uint8_t rotation, int &rx, int &ry) {
+    switch(rotation & 0x03u) {
+        case 1: rx = -dy; ry = dx; break;
+        case 2: rx = -dx; ry = -dy; break;
+        case 3: rx = dy; ry = -dx; break;
+        default: rx = dx; ry = dy; break;
+    }
+}
+
+static void spr_child_rot(uint8_t sprite, int x, int y, int dx, int dy,
+                          uint8_t rotation, bool flip_x, bool flip_y) {
+    int rx, ry;
+    rotate_child_offset(dx, dy, rotation, rx, ry);
+    spr_rot(sprite, x + rx, y + ry, rotation, flip_x, flip_y);
+}
+
+static void draw_rotated_2x2(uint8_t a, uint8_t b, uint8_t c, uint8_t d,
+                             int x, int y, uint8_t rotation) {
+    const uint8_t ids[4] = {a, b, c, d};
+    for(uint8_t sy = 0; sy < 2; ++sy) for(uint8_t sx = 0; sx < 2; ++sx) {
+        uint8_t dx = sx, dy = sy;
+        switch(rotation & 0x03u) {
+            case 1: dx = static_cast<uint8_t>(1 - sy); dy = sx; break;
+            case 2: dx = static_cast<uint8_t>(1 - sx); dy = static_cast<uint8_t>(1 - sy); break;
+            case 3: dx = sy; dy = static_cast<uint8_t>(1 - sx); break;
+            default: break;
+        }
+        spr_rot(ids[sy * 2 + sx], x + dx * 8, y + dy * 8, rotation);
+    }
+}
+
 void Object::draw() {
-    spr(sprite, x, y, 1, 1, flip.x, flip.y);
+    spr_rot(sprite, x, y, custom_rotation, flip.x, flip.y);
 }
 
 void draw_time(int x, int y) {
@@ -1820,6 +1857,14 @@ bool spikes_at(int x, int y, int w, int h, subpixel xspd, subpixel yspd) {
     for(int i = max(0, x / 8); i <= min(15, (x + w - 1) / 8); i++) {
         for(int j = max(0, y / 8); j <= min(15, (y + h - 1) / 8); j++) {
             uint8_t tile = tile_at(i, j);
+            if(custom_levels::active()) {
+                const uint8_t rot = custom_levels::tile_rotation(custom_levels::room_index(), i, j);
+                int dir = tile == 17 ? 0 : tile == 59 ? 1 : tile == 27 ? 2 : tile == 43 ? 3 : -1;
+                if(dir >= 0) {
+                    dir = (dir + rot) & 3;
+                    tile = dir == 0 ? 17 : dir == 1 ? 59 : dir == 2 ? 27 : 43;
+                }
+            }
             if(tile == 17 and ((y + h - 1) % 8 >= 6 or y + h == j * 8 + 8) and yspd >= 0) {
                 return true;
             } else if(tile == 27 and y % 8 <= 2 and yspd <= 0) {

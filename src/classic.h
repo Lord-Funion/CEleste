@@ -93,6 +93,7 @@ public:
     struct {int x; int y; int w; int h;} hitbox;
     uint8_t type;
     uint8_t custom_flags;
+    uint8_t custom_rotation;
     uint8_t custom_source;
 
     struct {int x; int y; int size; } hair[HAIR_SEGMENTS];
