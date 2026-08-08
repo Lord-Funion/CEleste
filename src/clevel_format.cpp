@@ -35,7 +35,7 @@ bool read_header(const uint8_t *data, std::size_t size, PayloadInfo &out, Reader
     if (!reader.take_bytes(magic, 4)) { error = Error::Truncated; return false; }
     if (std::memcmp(magic, "CELV", 4) != 0) { error = Error::BadMagic; return false; }
     if (!reader.take_u8(out.version)) { error = Error::Truncated; return false; }
-    if (out.version != FORMAT_VERSION) { error = Error::UnsupportedVersion; return false; }
+    if (out.version < MIN_FORMAT_VERSION || out.version > FORMAT_VERSION) { error = Error::UnsupportedVersion; return false; }
     if (!reader.take_u8(out.kind)) { error = Error::Truncated; return false; }
     if (out.kind != KIND_LEVEL && out.kind != KIND_PACK) { error = Error::UnsupportedKind; return false; }
     uint32_t checksum; uint8_t reserved8; uint8_t title_len; uint8_t author_len; uint16_t description_len; uint32_t reserved32;
@@ -53,16 +53,22 @@ bool read_header(const uint8_t *data, std::size_t size, PayloadInfo &out, Reader
     error = Error::None; return true;
 }
 
-bool decode_room(Reader &reader, Room &room, Error &error) {
+void unpack_rotations(const uint8_t *packed, uint8_t *rotations) {
+    for (std::size_t i = 0; i < ROOM_TILE_COUNT; ++i) {
+        rotations[i] = static_cast<uint8_t>((packed[i >> 2] >> ((i & 3u) * 2u)) & 0x03u);
+    }
+}
+
+bool decode_room(Reader &reader, uint8_t format_version, Room &room, Error &error) {
     uint16_t record_length;
     if (!reader.take_u16(record_length)) { error = Error::Truncated; return false; }
     const std::size_t record_end = reader.pos() + record_length;
     if (record_end < reader.pos() || record_end > reader.pos() + reader.remaining()) { error = Error::Truncated; return false; }
-    uint8_t reserved; uint16_t tile_length; uint16_t entity_count;
+    uint8_t rotation_encoding; uint16_t tile_length; uint16_t entity_count;
     if (!reader.take_u8(room.width) || !reader.take_u8(room.height) ||
         !reader.take_u8(room.spawn_x) || !reader.take_u8(room.spawn_y) ||
         !reader.take_u8(room.exit_x) || !reader.take_u8(room.exit_y) ||
-        !reader.take_u8(room.flags) || !reader.take_u8(reserved) ||
+        !reader.take_u8(room.flags) || !reader.take_u8(rotation_encoding) ||
         !reader.take_u16(tile_length) || !reader.take_u16(entity_count) || !reader.take_u32(room.id)) {
         error = Error::Truncated; return false;
     }
@@ -78,6 +84,18 @@ bool decode_room(Reader &reader, Room &room, Error &error) {
         std::memset(room.tiles + output, value, count); output += count;
     }
     if (output != ROOM_TILE_COUNT) { error = Error::BadRle; return false; }
+
+    std::memset(room.rotations, 0, sizeof room.rotations);
+    if (format_version >= 2) {
+        if (rotation_encoding == ROTATION_ENCODING_2BPP) {
+            const uint8_t *packed;
+            if (!reader.slice(ROTATION_PLANE_BYTES, packed)) { error = Error::Truncated; return false; }
+            unpack_rotations(packed, room.rotations);
+        } else if (rotation_encoding != 0) {
+            error = Error::BadRotationData; return false;
+        }
+    }
+
     room.entity_count = static_cast<uint8_t>(entity_count);
     for (uint16_t i = 0; i < entity_count; ++i) {
         if (!reader.take_u8(room.entities[i].type) || !reader.take_u8(room.entities[i].x) ||
@@ -96,7 +114,7 @@ bool decode_level_after_header(Reader &reader, const PayloadInfo &info, Level &o
     out.id = info.id; out.difficulty = info.difficulty; out.flags = info.flags; out.min_game_version = info.min_game_version;
     std::strcpy(out.title, info.title); std::strcpy(out.author, info.author); std::strcpy(out.description, info.description);
     out.room_count = static_cast<uint8_t>(info.item_count);
-    for (uint16_t i = 0; i < info.item_count; ++i) if (!decode_room(reader, out.rooms[i], error)) return false;
+    for (uint16_t i = 0; i < info.item_count; ++i) if (!decode_room(reader, info.version, out.rooms[i], error)) return false;
     if (reader.remaining() != 0) { error = Error::TrailingData; return false; }
     error = Error::None; return true;
 }
@@ -148,6 +166,7 @@ const char *error_string(Error error) {
         case Error::TooManyRooms: return "invalid room count";
         case Error::InvalidRoomSize: return "invalid room dimensions or coordinates";
         case Error::BadRle: return "invalid room RLE";
+        case Error::BadRotationData: return "invalid room rotation data";
         case Error::TooManyEntities: return "too many entities in room";
         case Error::RoomLengthMismatch: return "room record length mismatch";
         case Error::PackIndexOutOfRange: return "pack level index out of range";
