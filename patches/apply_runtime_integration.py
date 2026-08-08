@@ -42,7 +42,7 @@ if "source_collected(" not in classic and "bool has_fruit = custom_levels::activ
     replace("src/classic.cpp", "    bool has_fruit = got_fruit[level_index()];\n", "    bool has_fruit = custom_levels::active() ? false : got_fruit[level_index()];\n")
 replace("src/classic.cpp", "    if(frames == 0 and level_index() < 30) {\n", "    if(frames == 0 and (custom_levels::active() or level_index() < 30)) {\n")
 insert_after("src/classic.cpp", "    update_title_sequences();\n", "\n    if(custom_level_menu::update()) {\n        profiler_end(update);\n        return;\n    }\n")
-replace("src/classic.cpp", "    profiler_end(draw);\n}\n\nvoid Object::draw() {\n", "    custom_level_menu::draw();\n    profiler_end(draw);\n}\n\nvoid Object::draw() {\n")
+classic = (ROOT / "src/classic.cpp").read_text()\nif "custom_level_menu::draw();" not in classic:\n    replace("src/classic.cpp", "    profiler_end(draw);\n}\n\nvoid Object::draw() {\n", "    custom_level_menu::draw();\n    profiler_end(draw);\n}\n\nvoid Object::draw() {\n")
 replace("src/classic.cpp", "    return !practice_mode && !new_game_plus && level_index() == 30 &&\n", "    return !custom_levels::active() && !practice_mode && !new_game_plus && level_index() == 30 &&\n")
 replace("src/classic.cpp", "bool new_game_plus_available() {\n    if(practice_mode || new_game_plus || level_index() != 30) return false;\n", "bool new_game_plus_available() {\n    if(custom_levels::active() || practice_mode || new_game_plus || level_index() != 30) return false;\n")
 replace("src/classic.cpp", "    return !test_mode && !is_title() && level_index() != 30;\n", "    return !custom_levels::active() && !test_mode && !is_title() && level_index() != 30;\n")
