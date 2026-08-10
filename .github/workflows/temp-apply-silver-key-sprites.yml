@@ -1,0 +1,121 @@
+name: Temporary apply silver key sprites
+
+on:
+  push:
+    branches:
+      - fix/silver-key-sprites
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/silver-key-sprites
+      - name: Install silver key atlas and patch rendering
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64
+
+          atlas_b64 = """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"""
+          Path("src/gfx/atlas.png").write_bytes(base64.b64decode(atlas_b64))
+
+          classic = Path("src/classic.cpp")
+          s = classic.read_text()
+          old = """void SilverKey::draw() {
+    // The silver key deliberately reuses the original animated chest-key art.
+    pal(9, 6);
+    pal(10, 7);
+    spr_rot(sprite, x, y, custom_rotation, flip.x, flip.y);
+    pal(9, 9);
+    pal(10, 10);
+}"""
+          new = """void SilverKey::draw() {
+    // Dedicated silver versions of the normal key's three atlas frames live
+    // at sprite IDs 128..130. Keep using the normal key animation state
+    // (8/9/10) and translate it to the matching silver artwork.
+    uint8_t frame = sprite;
+    if(frame < 8 || frame > 10) frame = 8;
+    const uint8_t silver_sprite = static_cast<uint8_t>(128 + (frame - 8));
+    spr_rot(silver_sprite, x, y, custom_rotation, flip.x, flip.y);
+}"""
+          if s.count(old) != 1:
+              raise SystemExit(f"Expected one SilverKey::draw block, found {s.count(old)}")
+          classic.write_text(s.replace(old, new, 1))
+
+          editor = Path("tools/calculator-editor/src/main.cpp")
+          e = editor.read_text()
+          old_draw = """void draw_sprite(uint8_t id, int x, int y, uint8_t rotation = 0) {
+    if(id < 128 && atlas_tiles[id]) {
+        rotation &= 3;
+        if(!rotation) {
+            gfx_TransparentSprite(atlas_tiles[id], x, y);
+        } else {
+            gfx_TempSprite(tmp, 8, 8);
+            if(rotation == 1) gfx_RotateSpriteC(atlas_tiles[id], tmp);
+            else if(rotation == 2) gfx_RotateSpriteHalf(atlas_tiles[id], tmp);
+            else gfx_RotateSpriteCC(atlas_tiles[id], tmp);
+            gfx_TransparentSprite(tmp, x, y);
+        }
+    } else {
+        gfx_SetColor(tile_color(id));
+        gfx_FillRectangle(x, y, 8, 8);
+    }
+}"""
+          new_draw = """void draw_atlas_sprite(uint8_t sprite_id, int x, int y, uint8_t rotation = 0) {
+    rotation &= 3;
+    if(!rotation) {
+        gfx_TransparentSprite(atlas_tiles[sprite_id], x, y);
+    } else {
+        gfx_TempSprite(tmp, 8, 8);
+        if(rotation == 1) gfx_RotateSpriteC(atlas_tiles[sprite_id], tmp);
+        else if(rotation == 2) gfx_RotateSpriteHalf(atlas_tiles[sprite_id], tmp);
+        else gfx_RotateSpriteCC(atlas_tiles[sprite_id], tmp);
+        gfx_TransparentSprite(tmp, x, y);
+    }
+}
+
+void draw_sprite(uint8_t id, int x, int y, uint8_t rotation = 0) {
+    if(id < 128 && atlas_tiles[id]) {
+        draw_atlas_sprite(id, x, y, rotation);
+    } else {
+        gfx_SetColor(tile_color(id));
+        gfx_FillRectangle(x, y, 8, 8);
+    }
+}"""
+          if e.count(old_draw) != 1:
+              raise SystemExit(f"Expected one draw_sprite block, found {e.count(old_draw)}")
+          e = e.replace(old_draw, new_draw, 1)
+
+          old_key = """    if(id == 130) {
+        gfx_SetColor(6);
+        gfx_FillRectangle(x, y, 4, 4);
+        gfx_FillRectangle(x + 3, y + 1, 5, 2);
+        gfx_FillRectangle(x + 6, y + 3, 2, 2);
+        gfx_SetColor(7);
+        gfx_SetPixel(x + 1, y + 1);
+        return;
+    }"""
+          new_key = """    if(id == 130) {
+        // Use the dedicated silver-key texture instead of a gray placeholder.
+        draw_atlas_sprite(128, x, y, rotation);
+        return;
+    }"""
+          if e.count(old_key) != 1:
+              raise SystemExit(f"Expected one silver-key placeholder block, found {e.count(old_key)}")
+          editor.write_text(e.replace(old_key, new_key, 1))
+          PY
+      - name: Commit final patch
+        shell: bash
+        run: |
+          rm .github/workflows/temp-apply-silver-key-sprites.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/gfx/atlas.png src/classic.cpp tools/calculator-editor/src/main.cpp .github/workflows/temp-apply-silver-key-sprites.yml
+          git commit -m "Use dedicated silver key sprites"
+          git push origin HEAD:fix/silver-key-sprites
