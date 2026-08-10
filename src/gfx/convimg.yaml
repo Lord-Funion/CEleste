@@ -50,5 +50,6 @@ outputs:
     include-file: gfx.h
     palettes:
       - mypalette
+      - imgpalette
     converts:
       - myimages
