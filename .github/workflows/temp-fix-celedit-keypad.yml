@@ -1,0 +1,82 @@
+name: Temporary CELEDIT keypad fix
+
+on:
+  push:
+    branches:
+      - fix/celedit-keypad-mapping
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/celedit-keypad-mapping
+      - name: Install Pillow
+        run: python3 -m pip install --user pillow
+      - name: Fix keypad rows and extract key sprites
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+
+          path = Path('tools/calculator-editor/src/main.cpp')
+          s = path.read_text()
+
+          replacements = {
+              '(3,kb_Yequ)': '(1,kb_Yequ)',
+              '(3,kb_Window)': '(1,kb_Window)',
+              '(3,kb_Zoom)': '(1,kb_Zoom)',
+              '(3,kb_Trace)': '(1,kb_Trace)',
+              '(3,kb_Graph)': '(1,kb_Graph)',
+              '(1,kb_Clear)': '(6,kb_Clear)',
+          }
+          expected = {
+              '(3,kb_Yequ)': 2,
+              '(3,kb_Window)': 3,
+              '(3,kb_Zoom)': 2,
+              '(3,kb_Trace)': 2,
+              '(3,kb_Graph)': 2,
+              '(1,kb_Clear)': 1,
+          }
+          for old, new in replacements.items():
+              count = s.count(old)
+              if count != expected[old]:
+                  raise SystemExit(f'Expected {expected[old]} occurrences of {old}, found {count}')
+              s = s.replace(old, new)
+
+          old_rooms = '''            if(p(6,kb_Add)&&room_index+1<project.room_count){++room_index;rooms_cursor=room_index;}\n            if(p(6,kb_Sub)&&room_index){--room_index;rooms_cursor=room_index;}'''
+          new_rooms = '''            if(p(6,kb_Add)){\n                if(project.room_count>1){room_index=static_cast<uint8_t>((room_index+1)%project.room_count);rooms_cursor=room_index;set_notice("Next room");}\n                else set_notice("Only one room");\n            }\n            if(p(6,kb_Sub)){\n                if(project.room_count>1){room_index=static_cast<uint8_t>((room_index+project.room_count-1)%project.room_count);rooms_cursor=room_index;set_notice("Previous room");}\n                else set_notice("Only one room");\n            }'''
+          if old_rooms not in s:
+              raise SystemExit('Main-editor +/- room block not found')
+          s = s.replace(old_rooms, new_rooms, 1)
+          path.write_text(s)
+
+          atlas = Image.open('src/gfx/atlas.png').convert('RGBA')
+          out = Path('key-texture')
+          out.mkdir(exist_ok=True)
+          for sprite_id in (8, 9, 10):
+              x = (sprite_id % 16) * 8
+              y = (sprite_id // 16) * 8
+              atlas.crop((x, y, x + 8, y + 8)).save(out / f'normal_key_sprite_{sprite_id}.png')
+          strip = atlas.crop((8 * 8, 0, 11 * 8, 8))
+          strip.save(out / 'normal_key_all_3_frames.png')
+          strip.resize((24 * 24, 8 * 24), Image.Resampling.NEAREST).save(out / 'normal_key_all_3_frames_preview.png')
+          PY
+      - name: Remove temporary workflow and commit keypad fix
+        run: |
+          rm .github/workflows/temp-fix-celedit-keypad.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add tools/calculator-editor/src/main.cpp .github/workflows/temp-fix-celedit-keypad.yml
+          git commit -m "Fix CELEDIT keypad matrix mappings"
+          git push origin HEAD:fix/celedit-keypad-mapping
+      - name: Upload original key texture frames
+        uses: actions/upload-artifact@v4
+        with:
+          name: normal-key-three-frames
+          path: key-texture/*.png
+          retention-days: 90
