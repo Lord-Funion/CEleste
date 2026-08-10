@@ -1,17 +1,66 @@
+import re
 from pathlib import Path
 
 path = Path('tools/calculator-editor/src/main.cpp')
 s = path.read_text()
 
 anchor = 'constexpr uint8_t GAME_MASK = clevel::ENTITY_FLAG_MASK;\n'
-colors = '''constexpr uint8_t GAME_MASK = clevel::ENTITY_FLAG_MASK;\n\n// CELEDIT uses the 16-color PICO-8 palette for its UI. The atlas itself is\n// encoded with repeated-nibble indices (0x00, 0x11, ... 0xFF), so both\n// palettes are loaded at startup: imgpalette first, then these UI slots.\nconstexpr uint8_t PICO_BLACK = 0;\nconstexpr uint8_t PICO_DARK_BLUE = 1;\nconstexpr uint8_t PICO_DARK_PURPLE = 2;\nconstexpr uint8_t PICO_DARK_GREEN = 3;\nconstexpr uint8_t PICO_BROWN = 4;\nconstexpr uint8_t PICO_DARK_GRAY = 5;\nconstexpr uint8_t PICO_LIGHT_GRAY = 6;\nconstexpr uint8_t PICO_WHITE = 7;\nconstexpr uint8_t PICO_RED = 8;\nconstexpr uint8_t PICO_ORANGE = 9;\nconstexpr uint8_t PICO_YELLOW = 10;\nconstexpr uint8_t PICO_GREEN = 11;\nconstexpr uint8_t PICO_BLUE = 12;\nconstexpr uint8_t PICO_LAVENDER = 13;\nconstexpr uint8_t PICO_PINK = 14;\nconstexpr uint8_t PICO_PEACH = 15;\n'''
+colors = '''constexpr uint8_t GAME_MASK = clevel::ENTITY_FLAG_MASK;
+
+// CELEDIT uses the 16-color PICO-8 palette for its UI. The atlas itself is
+// encoded with repeated-nibble indices (0x00, 0x11, ... 0xFF), so both
+// palettes are loaded at startup: imgpalette first, then these UI slots.
+constexpr uint8_t PICO_BLACK = 0;
+constexpr uint8_t PICO_DARK_BLUE = 1;
+constexpr uint8_t PICO_DARK_PURPLE = 2;
+constexpr uint8_t PICO_DARK_GREEN = 3;
+constexpr uint8_t PICO_BROWN = 4;
+constexpr uint8_t PICO_DARK_GRAY = 5;
+constexpr uint8_t PICO_LIGHT_GRAY = 6;
+constexpr uint8_t PICO_WHITE = 7;
+constexpr uint8_t PICO_RED = 8;
+constexpr uint8_t PICO_ORANGE = 9;
+constexpr uint8_t PICO_YELLOW = 10;
+constexpr uint8_t PICO_GREEN = 11;
+constexpr uint8_t PICO_BLUE = 12;
+constexpr uint8_t PICO_LAVENDER = 13;
+constexpr uint8_t PICO_PINK = 14;
+constexpr uint8_t PICO_PEACH = 15;
+'''
 if 'constexpr uint8_t PICO_WHITE = 7;' not in s:
     if anchor not in s:
         raise SystemExit('color constant anchor not found')
     s = s.replace(anchor, colors, 1)
 
-old_tile = '''uint8_t tile_color(uint8_t id) {\n    if(id == 0) return 0;\n    if(category_of(id) == ICE) return 11;\n    if(category_of(id) == HAZARDS) return 7;\n    if(id == 26 || id == 28) return 224;\n    if(id == 22) return 47;\n    if(id == 18) return 192;\n    if(id == 8) return 231;\n    if(id == 130) return 6;\n    if(id == 131) return 5;\n    if(is_entity(id)) return 164;\n    return static_cast<uint8_t>(80 + (id * 13) % 80);\n}\n'''
-new_tile = '''uint8_t tile_color(uint8_t id) {\n    if(id == 0) return PICO_BLACK;\n    if(id == 26 || id == 28 || id == 18) return PICO_RED;\n    if(id == 22) return PICO_BLUE;\n    if(id == 8) return PICO_YELLOW;\n    if(id == 130) return PICO_LIGHT_GRAY;\n    if(id == 131) return PICO_DARK_GRAY;\n    if(category_of(id) == ICE) return PICO_BLUE;\n    if(category_of(id) == HAZARDS) return PICO_RED;\n    if(category_of(id) == TERRAIN) return PICO_DARK_GRAY;\n    if(category_of(id) == BACKGROUND) return PICO_DARK_BLUE;\n    if(is_entity(id)) return PICO_LAVENDER;\n    return PICO_DARK_PURPLE;\n}\n'''
+old_tile = '''uint8_t tile_color(uint8_t id) {
+    if(id == 0) return 0;
+    if(category_of(id) == ICE) return 11;
+    if(category_of(id) == HAZARDS) return 7;
+    if(id == 26 || id == 28) return 224;
+    if(id == 22) return 47;
+    if(id == 18) return 192;
+    if(id == 8) return 231;
+    if(id == 130) return 6;
+    if(id == 131) return 5;
+    if(is_entity(id)) return 164;
+    return static_cast<uint8_t>(80 + (id * 13) % 80);
+}
+'''
+new_tile = '''uint8_t tile_color(uint8_t id) {
+    if(id == 0) return PICO_BLACK;
+    if(id == 26 || id == 28 || id == 18) return PICO_RED;
+    if(id == 22) return PICO_BLUE;
+    if(id == 8) return PICO_YELLOW;
+    if(id == 130) return PICO_LIGHT_GRAY;
+    if(id == 131) return PICO_DARK_GRAY;
+    if(category_of(id) == ICE) return PICO_BLUE;
+    if(category_of(id) == HAZARDS) return PICO_RED;
+    if(category_of(id) == TERRAIN) return PICO_DARK_GRAY;
+    if(category_of(id) == BACKGROUND) return PICO_DARK_BLUE;
+    if(is_entity(id)) return PICO_LAVENDER;
+    return PICO_DARK_PURPLE;
+}
+'''
 if old_tile in s:
     s = s.replace(old_tile, new_tile, 1)
 elif new_tile not in s:
@@ -31,14 +80,21 @@ replacements = {
 for old, new in replacements.items():
     s = s.replace(old, new)
 
-setup_old = '''    gfx_SetTextTransparentColor(0);\n    gfx_SetPalette(mypalette,sizeof mypalette,0);'''
-setup_new = '''    gfx_SetPalette(imgpalette,sizeof imgpalette,0);\n    gfx_SetPalette(mypalette,sizeof mypalette,0);\n    gfx_SetTransparentColor(PICO_BLACK);\n    gfx_SetTextFGColor(PICO_WHITE);\n    gfx_SetTextBGColor(PICO_BLACK);\n    gfx_SetTextTransparentColor(PICO_BLACK);'''
+setup_old = '''    gfx_SetTextTransparentColor(0);
+    gfx_SetPalette(mypalette,sizeof mypalette,0);'''
+setup_new = '''    gfx_SetPalette(imgpalette,sizeof imgpalette,0);
+    gfx_SetPalette(mypalette,sizeof mypalette,0);
+    gfx_SetTransparentColor(PICO_BLACK);
+    gfx_SetTextFGColor(PICO_WHITE);
+    gfx_SetTextBGColor(PICO_BLACK);
+    gfx_SetTextTransparentColor(PICO_BLACK);'''
 if setup_old in s:
     s = s.replace(setup_old, setup_new)
 elif setup_new not in s:
     raise SystemExit('graphics setup block not found')
 
-# Catch the exact bug class that caused the unreadable UI: direct graphx color\n# indices outside the defined 0-15 UI palette.\nimport re
+# Catch the exact bug class that caused the unreadable UI: direct graphx color
+# indices outside the defined 0-15 UI palette.
 bad = []
 for m in re.finditer(r'gfx_Set(?:TextFG)?Color\((\d+)\)', s):
     if int(m.group(1)) > 15:
