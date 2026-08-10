@@ -48,4 +48,85 @@ if "custom_level_menu::draw();" not in classic:
 replace("src/classic.cpp", "    return !practice_mode && !new_game_plus && level_index() == 30 &&\n", "    return !custom_levels::active() && !practice_mode && !new_game_plus && level_index() == 30 &&\n")
 replace("src/classic.cpp", "bool new_game_plus_available() {\n    if(practice_mode || new_game_plus || level_index() != 30) return false;\n", "bool new_game_plus_available() {\n    if(custom_levels::active() || practice_mode || new_game_plus || level_index() != 30) return false;\n")
 replace("src/classic.cpp", "    return !test_mode && !is_title() && level_index() != 30;\n", "    return !custom_levels::active() && !test_mode && !is_title() && level_index() != 30;\n")
+
+# Keep the Silver Key visually identical to the user's hand-recolored versions
+# of the normal key frames: yellow -> light gray, orange -> dark gray.
+replace(
+    "src/classic.cpp",
+    """void SilverKey::draw() {
+    // The silver key deliberately reuses the original animated chest-key art.
+    pal(9, 6);
+    pal(10, 7);
+    spr_rot(sprite, x, y, custom_rotation, flip.x, flip.y);
+    pal(9, 9);
+    pal(10, 10);
+}
+""",
+    """void SilverKey::draw() {
+    // Reuse the normal key's three animation frames with the user's exact
+    // silver recolor: orange -> dark gray and yellow -> light gray.
+    pal(9, 5);
+    pal(10, 6);
+    spr_rot(sprite, x, y, custom_rotation, flip.x, flip.y);
+    pal(9, 9);
+    pal(10, 10);
+}
+"""
+)
+
+editor = (ROOT / "tools/calculator-editor/src/main.cpp").read_text()
+silver_helper = """void draw_silver_key_texture(int x, int y, uint8_t rotation = 0) {
+    // Copy normal-key frame 8 and apply the same recolor used by the runtime.
+    // Atlas graphics use repeated-nibble palette slots: 0x99=orange,
+    // 0xAA=yellow, 0x55=dark gray, 0x66=light gray.
+    gfx_TempSprite(silver, 8, 8);
+    silver->width = 8;
+    silver->height = 8;
+    std::memcpy(silver->data, atlas_tiles[8]->data, 64);
+    for(uint8_t i = 0; i < 64; ++i) {
+        if(silver->data[i] == 0x99) silver->data[i] = 0x55;
+        else if(silver->data[i] == 0xAA) silver->data[i] = 0x66;
+    }
+
+    rotation &= 3;
+    if(!rotation) {
+        gfx_TransparentSprite(silver, x, y);
+        return;
+    }
+
+    gfx_TempSprite(rotated, 8, 8);
+    if(rotation == 1) gfx_RotateSpriteC(silver, rotated);
+    else if(rotation == 2) gfx_RotateSpriteHalf(silver, rotated);
+    else gfx_RotateSpriteCC(silver, rotated);
+    gfx_TransparentSprite(rotated, x, y);
+}
+
+"""
+if "void draw_silver_key_texture(" not in editor:
+    marker = "void rotate_offset(int dx, int dy, uint8_t rotation, int &rx, int &ry) {\n"
+    if marker not in editor:
+        raise SystemExit("Expected CELEDIT draw helper insertion point not found")
+    editor = editor.replace(marker, silver_helper + marker, 1)
+
+old_silver_placeholder = """    if(id == 130) {
+        gfx_SetColor(6);
+        gfx_FillRectangle(x, y, 4, 4);
+        gfx_FillRectangle(x + 3, y + 1, 5, 2);
+        gfx_FillRectangle(x + 6, y + 3, 2, 2);
+        gfx_SetColor(7);
+        gfx_SetPixel(x + 1, y + 1);
+        return;
+    }
+"""
+new_silver_preview = """    if(id == 130) {
+        draw_silver_key_texture(x, y, rotation);
+        return;
+    }
+"""
+if old_silver_placeholder in editor:
+    editor = editor.replace(old_silver_placeholder, new_silver_preview, 1)
+elif new_silver_preview not in editor:
+    raise SystemExit("Expected CELEDIT Silver Key draw block not found")
+(ROOT / "tools/calculator-editor/src/main.cpp").write_text(editor)
+
 print("Custom-level runtime integration applied.")
