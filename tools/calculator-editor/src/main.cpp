@@ -1239,17 +1239,23 @@ int main() {
             if(p(7,kb_Down)&&cursor_y<15)++cursor_y;
             if(p(1,kb_2nd))apply_tool();
             if(p(2,kb_Alpha)){push_undo();if(!erase_at(cursor_x,cursor_y))--undo_count;}
-            if(p(3,kb_Yequ))cycle_tool();
-            if(p(3,kb_Window))rotate_placement();
-            if(p(3,kb_Zoom)){view=PALETTE_VIEW;palette_cursor=0;}
-            if(p(3,kb_Trace)){view=ROOMS_VIEW;rooms_cursor=room_index;}
-            if(p(3,kb_Graph)){view=ACTIONS_VIEW;action_cursor=0;new_project_armed=false;}
+            if(p(1,kb_Yequ))cycle_tool();
+            if(p(1,kb_Window))rotate_placement();
+            if(p(1,kb_Zoom)){view=PALETTE_VIEW;palette_cursor=0;}
+            if(p(1,kb_Trace)){view=ROOMS_VIEW;rooms_cursor=room_index;}
+            if(p(1,kb_Graph)){view=ACTIONS_VIEW;action_cursor=0;new_project_armed=false;}
             if(p(4,kb_Stat))open_properties();
-            if(p(6,kb_Add)&&room_index+1<project.room_count){++room_index;rooms_cursor=room_index;}
-            if(p(6,kb_Sub)&&room_index){--room_index;rooms_cursor=room_index;}
+            if(p(6,kb_Add)){
+                if(project.room_count>1){room_index=static_cast<uint8_t>((room_index+1)%project.room_count);rooms_cursor=room_index;set_notice("Next room");}
+                else set_notice("Only one room");
+            }
+            if(p(6,kb_Sub)){
+                if(project.room_count>1){room_index=static_cast<uint8_t>((room_index+project.room_count-1)%project.room_count);rooms_cursor=room_index;set_notice("Previous room");}
+                else set_notice("Only one room");
+            }
             if(p(1,kb_Del))undo();
             if(p(6,kb_Enter))redo();
-            if(p(1,kb_Clear)){save_draft();running=false;}
+            if(p(6,kb_Clear)){save_draft();running=false;}
         } else if(view==PALETTE_VIEW) {
             uint8_t filtered[sizeof PALETTE];
             const uint8_t count=build_filtered(filtered,palette_category);
@@ -1260,10 +1266,10 @@ int main() {
                 if(p(7,kb_Right)&&palette_cursor+1<count)++palette_cursor;
                 if(p(7,kb_Up)&&palette_cursor>=6)palette_cursor-=6;
                 if(p(7,kb_Down)&&palette_cursor+6<count)palette_cursor+=6;
-                if(p(3,kb_Window))rotate_placement();
+                if(p(1,kb_Window))rotate_placement();
                 if(p(1,kb_2nd)){selected_id=filtered[palette_cursor];placement_flags=0;tool=PENCIL;view=EDITOR;set_notice("Palette selection ready");}
             }
-            if(p(1,kb_Mode)||p(3,kb_Zoom))view=EDITOR;
+            if(p(1,kb_Mode)||p(1,kb_Zoom))view=EDITOR;
         } else if(view==ROOMS_VIEW) {
             if(p(7,kb_Left)&&rooms_cursor)--rooms_cursor;
             if(p(7,kb_Right)&&rooms_cursor+1<project.room_count)++rooms_cursor;
@@ -1275,7 +1281,7 @@ int main() {
             if(p(1,kb_Del))delete_room();
             if(p(6,kb_Add))move_room(1);
             if(p(6,kb_Sub))move_room(-1);
-            if(p(1,kb_Mode)||p(3,kb_Trace))view=EDITOR;
+            if(p(1,kb_Mode)||p(1,kb_Trace))view=EDITOR;
         } else if(view==ACTIONS_VIEW) {
             if(p(7,kb_Up)&&action_cursor){--action_cursor;new_project_armed=false;}
             if(p(7,kb_Down)&&action_cursor+1<ACTION_COUNT){++action_cursor;new_project_armed=false;}
@@ -1283,17 +1289,17 @@ int main() {
                 if(action_cursor==7){save_draft();running=false;}
                 else activate_action();
             }
-            if(p(1,kb_Mode)||p(3,kb_Graph)){view=EDITOR;new_project_armed=false;}
+            if(p(1,kb_Mode)||p(1,kb_Graph)){view=EDITOR;new_project_armed=false;}
         } else if(view==PROPERTIES_VIEW) {
             const uint8_t rot=property_rotation();
             if(p(7,kb_Left))set_property_rotation((rot+3)&3);
-            if(p(7,kb_Right)||p(3,kb_Window))set_property_rotation((rot+1)&3);
+            if(p(7,kb_Right)||p(1,kb_Window))set_property_rotation((rot+1)&3);
             if(p(1,kb_2nd))toggle_property_option();
             if(p(6,kb_Add))adjust_property_link(1);
             if(p(6,kb_Sub))adjust_property_link(-1);
             if(p(1,kb_Mode)||p(4,kb_Stat))view=EDITOR;
         } else if(view==HELP_VIEW) {
-            if(p(1,kb_Mode)||p(3,kb_Yequ)||p(1,kb_2nd))view=EDITOR;
+            if(p(1,kb_Mode)||p(1,kb_Yequ)||p(1,kb_2nd))view=EDITOR;
         }
         for(uint8_t group=1;group<=7;++group)old[group]=kb_Data[group];
     }
