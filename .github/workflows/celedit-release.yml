@@ -1,0 +1,87 @@
+name: CELEDIT build and release
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'tools/calculator-editor/**'
+      - 'src/gfx/**'
+      - 'src/clevel_format.*'
+      - '.github/workflows/celedit-release.yml'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'tools/calculator-editor/**'
+      - 'src/gfx/**'
+      - 'src/clevel_format.*'
+      - '.github/workflows/celedit-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-celedit:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install CE toolchain v15.0
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -fL --retry 5 --retry-delay 2 \
+            https://github.com/CE-Programming/toolchain/releases/download/v15.0/CEdev-Linux.tar.gz \
+            -o /tmp/CEdev-Linux.tar.gz
+          mkdir -p "$HOME/cedev-dist"
+          tar -xzf /tmp/CEdev-Linux.tar.gz -C "$HOME/cedev-dist"
+          CEDEV_CONFIG="$(find "$HOME/cedev-dist" -type f -name cedev-config -print -quit)"
+          test -n "$CEDEV_CONFIG"
+          chmod +x "$CEDEV_CONFIG"
+          CEDEV_BIN="$(dirname "$CEDEV_CONFIG")"
+          CEDEV_ROOT="$(cd "$CEDEV_BIN/.." && pwd)"
+          echo "$CEDEV_BIN" >> "$GITHUB_PATH"
+          echo "CEDEV=$CEDEV_ROOT" >> "$GITHUB_ENV"
+          "$CEDEV_CONFIG" --makefile >/dev/null
+
+      - name: Build CELEDIT
+        shell: bash
+        working-directory: tools/calculator-editor
+        run: |
+          set -euxo pipefail
+          make clean || true
+          bash prepare-gfx.sh
+          make -j2
+          test -s bin/CELEDIT.8xp
+          sha256sum bin/CELEDIT.8xp > bin/CELEDIT.8xp.sha256
+
+      - name: Upload CELEDIT artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CELEDIT-${{ github.run_number }}
+          path: |
+            tools/calculator-editor/bin/CELEDIT.8xp
+            tools/calculator-editor/bin/CELEDIT.8xp.sha256
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish automatic CELEDIT release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          TAG="celedit-build-${GITHUB_RUN_NUMBER}"
+          mkdir -p celedit-release
+          cp tools/calculator-editor/bin/CELEDIT.8xp celedit-release/CELEDIT.8xp
+          cp tools/calculator-editor/bin/CELEDIT.8xp.sha256 celedit-release/CELEDIT.8xp.sha256
+          gh release create "$TAG" \
+            celedit-release/CELEDIT.8xp \
+            celedit-release/CELEDIT.8xp.sha256 \
+            --title "CELEDIT automatic build #${GITHUB_RUN_NUMBER}" \
+            --notes "Automatic TI-84 Plus CE editor build from commit ${GITHUB_SHA}." \
+            --latest=false
