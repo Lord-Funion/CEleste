@@ -75,6 +75,8 @@ enum type {
     BIG_CHEST = 96,
     FLAG = 118,
     CLIMB_CHEST = 129,
+    SILVER_KEY = 130,
+    SILVER_GATE = 131,
     PLAYER
 };
 
@@ -230,12 +232,26 @@ public:
     void update() override;
 };
 
+class SilverKey : public Object {
+public:
+    SilverKey(int x, int y);
+    void update() override;
+    void draw() override;
+};
+
 class Chest : public Object {
 public:
     Chest(int x, int y);
     int start;
     int timer;
     void update() override;
+};
+
+class SilverGate : public Object {
+public:
+    SilverGate(int x, int y);
+    void update() override;
+    void draw() override;
 };
 
 class ClimbChest : public Object {

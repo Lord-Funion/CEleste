@@ -40,6 +40,8 @@ void collect_fruit(uint8_t room);
 bool source_collected(uint8_t room, uint8_t source);
 void collect_source(uint8_t room, uint8_t source);
 bool key_needed(uint8_t room);
+bool gate_link_unlocked(uint8_t link);
+void unlock_gate_link(uint8_t link);
 const char *last_error();
 
 } // namespace custom_levels

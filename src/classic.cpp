@@ -957,6 +957,37 @@ void Key::update() {
     }
 }
 
+SilverKey::SilverKey(int x, int y) : Object(x, y) {
+    type = SILVER_KEY;
+    sprite = KEY;
+    solids = false;
+}
+
+void SilverKey::update() {
+    int was = sprite;
+    sprite = 9 + (sin(frames * (UINT24_MAX / 30)) + TRIG_SCALE / 2) / TRIG_SCALE;
+    int is = sprite;
+    if(is == 10 and is != was) flip.x = not flip.x;
+    if(check_player(0, 0)) {
+        sfx_timer = 10;
+        if(custom_levels::active()) {
+            custom_levels::unlock_gate_link(custom_flags);
+            custom_levels::collect_source(custom_levels::room_index(), custom_source);
+        }
+        new Smoke(x, y);
+        delete this;
+    }
+}
+
+void SilverKey::draw() {
+    // The silver key deliberately reuses the original animated chest-key art.
+    pal(9, 6);
+    pal(10, 7);
+    spr_rot(sprite, x, y, custom_rotation, flip.x, flip.y);
+    pal(9, 9);
+    pal(10, 10);
+}
+
 Chest::Chest(int x, int y) : Object(x, y) {
     x -= 4;
     start = x;
@@ -981,6 +1012,32 @@ void Chest::update() {
             delete this;
         }
     }
+}
+
+SilverGate::SilverGate(int x, int y) : Object(x, y) {
+    type = SILVER_GATE;
+    sprite = 0;
+}
+
+void SilverGate::update() {
+    if(custom_levels::active() && custom_levels::gate_link_unlocked(custom_flags)) {
+        new Smoke(x, y);
+        delete this;
+    }
+}
+
+void SilverGate::draw() {
+    // One 8x8 linked block. Authors can stack any number with the same link
+    // group to build a door, portcullis, wall, or arbitrary gate shape.
+    rectfill(x, y, x + 7, y + 7, 5);
+    if(custom_rotation & 1u) {
+        rectfill(x, y + 1, x + 7, y + 2, 6);
+        rectfill(x, y + 5, x + 7, y + 6, 6);
+    } else {
+        rectfill(x + 1, y, x + 2, y + 7, 6);
+        rectfill(x + 5, y, x + 6, y + 7, 6);
+    }
+    rectfill(x + 3, y + 3, x + 4, y + 4, 7);
 }
 
 ClimbChest::ClimbChest(int x, int y) : Object(x, y) {
@@ -1282,6 +1339,12 @@ Object *init_object(type type, int x, int y, uint8_t flags, uint8_t source) {
                 ? (custom_levels::key_needed(custom_levels::room_index()) ? new Key(x, y) : nullptr)
                 : (source_done ? nullptr : new Key(x, y));
             break;
+        case SILVER_KEY:
+            object = custom && !source_done ? new SilverKey(x, y) : nullptr;
+            break;
+        case SILVER_GATE:
+            object = custom && !custom_levels::gate_link_unlocked(gameplay_flags) ? new SilverGate(x, y) : nullptr;
+            break;
         case CHEST:
             object = (custom && (gameplay_flags & 0x01u)) || !source_done ? new Chest(x, y) : nullptr;
             break;
@@ -1330,7 +1393,8 @@ bool Object::is_solid(int ox, int oy) {
     }
     return solid_at(x + hitbox.x + ox, y + hitbox.y + oy, hitbox.w, hitbox.h)
            or check(FALL_FLOOR, ox, oy)
-           or check(FAKE_WALL, ox, oy);
+           or check(FAKE_WALL, ox, oy)
+           or check(SILVER_GATE, ox, oy);
 }
 
 

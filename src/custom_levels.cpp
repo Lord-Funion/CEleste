@@ -16,6 +16,7 @@ uint16_t content_generation = 1;
 bool collected_fruit[clevel::MAX_ROOMS]{}; // legacy v1 tile-plane compatibility
 constexpr uint8_t SOURCE_BYTES = (clevel::MAX_ENTITIES_PER_ROOM + 7) / 8;
 uint8_t collected_sources[clevel::MAX_ROOMS][SOURCE_BYTES]{};
+uint8_t unlocked_gate_links[8]{}; // 64 link groups shared by all rooms in the active custom level.
 char error_text[64] = "";
 
 void set_error(const char *text) {
@@ -68,7 +69,7 @@ bool inspect_variable(const char *name, CatalogEntry &entry) {
 }
 }
 
-void initialize() { count = 0; is_active = false; current_room = 0; active_catalog = 0; active_pack_level = 0; content_generation = 1; std::memset(collected_fruit, 0, sizeof collected_fruit); std::memset(collected_sources, 0, sizeof collected_sources); error_text[0] = '\0'; }
+void initialize() { count = 0; is_active = false; current_room = 0; active_catalog = 0; active_pack_level = 0; content_generation = 1; std::memset(collected_fruit, 0, sizeof collected_fruit); std::memset(collected_sources, 0, sizeof collected_sources); std::memset(unlocked_gate_links, 0, sizeof unlocked_gate_links); error_text[0] = '\0'; }
 
 uint8_t scan() {
     count = 0;
@@ -106,11 +107,12 @@ bool load(uint8_t catalog_index, uint16_t pack_level_index) {
     current_room = 0; active_catalog = catalog_index; active_pack_level = pack_level_index; is_active = true;
     std::memset(collected_fruit, 0, sizeof collected_fruit);
     std::memset(collected_sources, 0, sizeof collected_sources);
+    std::memset(unlocked_gate_links, 0, sizeof unlocked_gate_links);
     ++content_generation; if (!content_generation) content_generation = 1;
     error_text[0] = '\0'; return true;
 }
 
-void unload() { if (is_active) { ++content_generation; if (!content_generation) content_generation = 1; } is_active = false; current_room = 0; active_pack_level = 0; }
+void unload() { if (is_active) { ++content_generation; if (!content_generation) content_generation = 1; } is_active = false; current_room = 0; active_pack_level = 0; std::memset(unlocked_gate_links, 0, sizeof unlocked_gate_links); }
 bool active() { return is_active; }
 const clevel::Level *level() { return is_active ? &loaded : nullptr; }
 uint8_t room_index() { return current_room; }
@@ -150,6 +152,18 @@ void collect_source(uint8_t room, uint8_t source) {
     if (!is_active || room >= loaded.room_count) return;
     if (source >= clevel::MAX_ENTITIES_PER_ROOM) { collected_fruit[room] = true; return; }
     collected_sources[room][source >> 3] |= static_cast<uint8_t>(1u << (source & 7));
+}
+
+bool gate_link_unlocked(uint8_t link) {
+    if (!is_active) return false;
+    link = static_cast<uint8_t>(link & clevel::ENTITY_FLAG_MASK);
+    return (unlocked_gate_links[link >> 3] & static_cast<uint8_t>(1u << (link & 7))) != 0;
+}
+
+void unlock_gate_link(uint8_t link) {
+    if (!is_active) return;
+    link = static_cast<uint8_t>(link & clevel::ENTITY_FLAG_MASK);
+    unlocked_gate_links[link >> 3] |= static_cast<uint8_t>(1u << (link & 7));
 }
 
 bool key_needed(uint8_t room) {
