@@ -10,38 +10,19 @@ permissions:
 
 jobs:
   apply:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: agent/silver-key-gates
           fetch-depth: 0
-      - name: Apply source patch
+      - name: Apply guarded source changes
+        run: python3 tools/apply_silver_key_gates.py
+      - name: Commit source changes
         shell: bash
         run: |
           set -euo pipefail
-          PATCH=tools/patches/silver-key-gates.patch
-          if [ ! -f "$PATCH" ]; then
-            echo "Patch already cleaned up."
-            exit 0
-          fi
-          if git apply --check "$PATCH"; then
-            git apply "$PATCH"
-          else
-            echo "Patch is already applied or no longer applies; checking for feature marker."
-            grep -q 'SILVER_GATE = 131' src/classic.h || exit 1
-          fi
-
-          # spr_rot takes rotation plus optional flip_x/flip_y; keep the animated key flip.
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('src/classic.cpp')
-          s = p.read_text()
-          s = s.replace('spr_rot(sprite, x, y, custom_rotation, 1, 1, flip.x, flip.y);',
-                        'spr_rot(sprite, x, y, custom_rotation, flip.x, flip.y);')
-          p.write_text(s)
-          PY
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/classic.h src/classic.cpp src/custom_levels.h src/custom_levels.cpp tools/calculator-editor/src/main.cpp
