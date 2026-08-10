@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/silver-key-gates
+  pull_request:
+    branches:
+      - master
 
 permissions:
   contents: write
