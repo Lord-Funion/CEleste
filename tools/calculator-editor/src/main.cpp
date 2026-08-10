@@ -18,6 +18,26 @@ constexpr uint8_t ROT_SHIFT = clevel::ENTITY_ROTATION_SHIFT;
 constexpr uint8_t ROT_MASK = clevel::ENTITY_ROTATION_MASK;
 constexpr uint8_t GAME_MASK = clevel::ENTITY_FLAG_MASK;
 
+// CELEDIT uses the 16-color PICO-8 palette for its UI. The atlas itself is
+// encoded with repeated-nibble indices (0x00, 0x11, ... 0xFF), so both
+// palettes are loaded at startup: imgpalette first, then these UI slots.
+constexpr uint8_t PICO_BLACK = 0;
+constexpr uint8_t PICO_DARK_BLUE = 1;
+constexpr uint8_t PICO_DARK_PURPLE = 2;
+constexpr uint8_t PICO_DARK_GREEN = 3;
+constexpr uint8_t PICO_BROWN = 4;
+constexpr uint8_t PICO_DARK_GRAY = 5;
+constexpr uint8_t PICO_LIGHT_GRAY = 6;
+constexpr uint8_t PICO_WHITE = 7;
+constexpr uint8_t PICO_RED = 8;
+constexpr uint8_t PICO_ORANGE = 9;
+constexpr uint8_t PICO_YELLOW = 10;
+constexpr uint8_t PICO_GREEN = 11;
+constexpr uint8_t PICO_BLUE = 12;
+constexpr uint8_t PICO_LAVENDER = 13;
+constexpr uint8_t PICO_PINK = 14;
+constexpr uint8_t PICO_PEACH = 15;
+
 constexpr uint8_t PALETTE[] = {
     0,1,
     32,33,34,35,36,37,38,39,48,49,50,51,52,53,54,55,72,
@@ -352,17 +372,18 @@ void redo() {
 }
 
 uint8_t tile_color(uint8_t id) {
-    if(id == 0) return 0;
-    if(category_of(id) == ICE) return 11;
-    if(category_of(id) == HAZARDS) return 7;
-    if(id == 26 || id == 28) return 224;
-    if(id == 22) return 47;
-    if(id == 18) return 192;
-    if(id == 8) return 231;
-    if(id == 130) return 6;
-    if(id == 131) return 5;
-    if(is_entity(id)) return 164;
-    return static_cast<uint8_t>(80 + (id * 13) % 80);
+    if(id == 0) return PICO_BLACK;
+    if(id == 26 || id == 28 || id == 18) return PICO_RED;
+    if(id == 22) return PICO_BLUE;
+    if(id == 8) return PICO_YELLOW;
+    if(id == 130) return PICO_LIGHT_GRAY;
+    if(id == 131) return PICO_DARK_GRAY;
+    if(category_of(id) == ICE) return PICO_BLUE;
+    if(category_of(id) == HAZARDS) return PICO_RED;
+    if(category_of(id) == TERRAIN) return PICO_DARK_GRAY;
+    if(category_of(id) == BACKGROUND) return PICO_DARK_BLUE;
+    if(is_entity(id)) return PICO_LAVENDER;
+    return PICO_DARK_PURPLE;
 }
 
 void draw_sprite(uint8_t id, int x, int y, uint8_t rotation = 0) {
@@ -805,7 +826,7 @@ void draw_panel(int x,int y,int w,int h,uint8_t fill=1,uint8_t border=13) {
 void draw_softkey(int x,const char *top,const char *bottom,bool active=false) {
     gfx_SetColor(active?13:1);gfx_FillRectangle(x,181,60,30);
     gfx_SetColor(5);gfx_Rectangle(x,181,60,30);
-    gfx_SetTextFGColor(255);
+    gfx_SetTextFGColor(PICO_WHITE);
     gfx_PrintStringXY(top,x+4,185);
     gfx_SetTextFGColor(13);
     gfx_PrintStringXY(bottom,x+4,198);
@@ -814,7 +835,7 @@ void draw_softkey(int x,const char *top,const char *bottom,bool active=false) {
 void draw_selected_info() {
     draw_panel(144,42,168,132,1,5);
     const char *name=logical_name(selected_id);
-    gfx_SetTextFGColor(255);
+    gfx_SetTextFGColor(PICO_WHITE);
     gfx_PrintStringXY("SELECTED",152,50);
     if(name) gfx_PrintStringXY(name,152,64);
     else gfx_PrintStringXY(category_name(category_of(selected_id)),152,64);
@@ -822,7 +843,7 @@ void draw_selected_info() {
     gfx_PrintStringXY("ID",152,78);gfx_SetTextXY(170,78);gfx_PrintUInt(selected_id,3);
     gfx_PrintStringXY("ROT",210,78);gfx_SetTextXY(236,78);gfx_PrintUInt(placement_rotation*90,3);
     if(selected_id) draw_piece(selected_id,154,94,placement_rotation);
-    gfx_SetTextFGColor(255);
+    gfx_SetTextFGColor(PICO_WHITE);
     gfx_PrintStringXY("Tool",190,94);gfx_PrintStringXY(tool_name(tool),224,94);
     if(selected_id==20||selected_id==64) {
         gfx_PrintStringXY("Berry",190,108);
@@ -842,11 +863,11 @@ void draw_selected_info() {
 
 void draw_editor() {
     gfx_FillScreen(0);
-    gfx_SetTextFGColor(255);
+    gfx_SetTextFGColor(PICO_WHITE);
     gfx_PrintStringXY("CELEDIT",8,5);
     gfx_SetTextFGColor(13);
     gfx_PrintStringXY("Studio-style",62,5);
-    gfx_SetTextFGColor(255);
+    gfx_SetTextFGColor(PICO_WHITE);
     gfx_PrintStringXY(project.title,8,18);
     gfx_SetTextXY(255,18);gfx_PrintString("R");gfx_PrintUInt(room_index+1,2);gfx_PrintChar('/');gfx_PrintUInt(project.room_count,2);
 
@@ -861,7 +882,7 @@ void draw_editor() {
         draw_piece(e.type,8+e.x*8,42+e.y*8,rotation_from_flags(e.flags));
     }
     draw_piece(1,8+r.spawn_x*8,42+r.spawn_y*8);
-    gfx_SetColor(tool==ERASER?224:tool==FILL?231:tool==PICKER?47:255);
+    gfx_SetColor(tool==ERASER?PICO_RED:tool==FILL?PICO_YELLOW:tool==PICKER?PICO_BLUE:PICO_WHITE);
     gfx_Rectangle(8+cursor_x*8,42+cursor_y*8,8,8);
 
     draw_selected_info();
@@ -870,9 +891,9 @@ void draw_editor() {
     draw_softkey(130,"ZOOM","Palette",false);
     draw_softkey(192,"TRACE","Rooms",false);
     draw_softkey(254,"GRAPH","Menu",false);
-    gfx_SetTextFGColor(231);
+    gfx_SetTextFGColor(PICO_YELLOW);
     gfx_PrintStringXY(notice,8,218);
-    gfx_SetTextFGColor(255);
+    gfx_SetTextFGColor(PICO_WHITE);
     gfx_PrintStringXY("+/- room  CLEAR saves+quits",8,230);
     gfx_SwapDraw();
 }
@@ -892,9 +913,9 @@ void draw_palette() {
     else if(palette_cursor>=count) palette_cursor=count-1;
     const uint8_t page=palette_cursor/24;
     const uint8_t start=page*24;
-    gfx_SetTextFGColor(255);gfx_PrintStringXY("PALETTE",8,6);
+    gfx_SetTextFGColor(PICO_WHITE);gfx_PrintStringXY("PALETTE",8,6);
     gfx_SetTextFGColor(13);gfx_PrintStringXY(category_name(palette_category),72,6);
-    gfx_SetTextFGColor(255);gfx_PrintStringXY("+/- category",210,6);
+    gfx_SetTextFGColor(PICO_WHITE);gfx_PrintStringXY("+/- category",210,6);
     for(uint8_t slot=0;slot<24;++slot) {
         const uint8_t idx=start+slot;
         if(idx>=count) break;
@@ -904,12 +925,12 @@ void draw_palette() {
         draw_panel(x,y,48,40,active?2:1,active?13:5);
         const uint8_t id=filtered[idx];
         draw_piece(id,x+5,y+5, id==selected_id?placement_rotation:0);
-        gfx_SetTextFGColor(active?255:13);
+        gfx_SetTextFGColor(active?PICO_WHITE:PICO_LAVENDER);
         const char *name=logical_name(id);
         if(name && std::strlen(name)<=7) gfx_PrintStringXY(name,x+4,y+24);
         else {gfx_PrintStringXY("ID",x+4,y+24);gfx_SetTextXY(x+20,y+24);gfx_PrintUInt(id,3);}
     }
-    gfx_SetTextFGColor(255);
+    gfx_SetTextFGColor(PICO_WHITE);
     gfx_PrintStringXY("Arrows browse  2ND select  WIN rotate",8,210);
     gfx_PrintStringXY("MODE/ZOOM back",8,224);
     gfx_SwapDraw();
@@ -925,14 +946,14 @@ void draw_room_thumbnail(const EditRoom &r,int x,int y,bool active) {
         gfx_SetColor(tile_color(r.entities[i].type));
         gfx_FillRectangle(x+3+r.entities[i].x*2,y+3+r.entities[i].y*2,2,2);
     }
-    gfx_SetColor(224);gfx_FillRectangle(x+3+r.spawn_x*2,y+3+r.spawn_y*2,2,2);
+    gfx_SetColor(PICO_RED);gfx_FillRectangle(x+3+r.spawn_x*2,y+3+r.spawn_y*2,2,2);
 }
 
 void draw_rooms() {
     gfx_FillScreen(0);
     if(rooms_cursor>=project.room_count) rooms_cursor=project.room_count-1;
     const uint8_t page=rooms_cursor/8,start=page*8;
-    gfx_SetTextFGColor(255);gfx_PrintStringXY("ROOMS",8,6);
+    gfx_SetTextFGColor(PICO_WHITE);gfx_PrintStringXY("ROOMS",8,6);
     gfx_SetTextFGColor(13);gfx_SetTextXY(60,6);gfx_PrintUInt(project.room_count,2);gfx_PrintString(" total");
     for(uint8_t slot=0;slot<8;++slot) {
         const uint8_t idx=start+slot;
@@ -940,10 +961,10 @@ void draw_rooms() {
         const uint8_t col=slot%4,row=slot/4;
         const int x=5+col*78,y=30+row*82;
         draw_room_thumbnail(project.rooms[idx],x,y,idx==rooms_cursor);
-        gfx_SetTextFGColor(idx==rooms_cursor?255:13);
+        gfx_SetTextFGColor(idx==rooms_cursor?PICO_WHITE:PICO_LAVENDER);
         gfx_PrintStringXY("Room",x+4,y+52);gfx_SetTextXY(x+38,y+52);gfx_PrintUInt(idx+1,2);
     }
-    gfx_SetTextFGColor(255);
+    gfx_SetTextFGColor(PICO_WHITE);
     gfx_PrintStringXY("2ND open  ENTER add  ALPHA duplicate",8,198);
     gfx_PrintStringXY("DEL delete  +/- move  MODE/TRACE back",8,214);
     gfx_SwapDraw();
@@ -954,17 +975,17 @@ constexpr uint8_t ACTION_COUNT=sizeof ACTIONS/sizeof ACTIONS[0];
 
 void draw_actions() {
     gfx_FillScreen(0);
-    gfx_SetTextFGColor(255);gfx_PrintStringXY("MENU",8,7);
+    gfx_SetTextFGColor(PICO_WHITE);gfx_PrintStringXY("MENU",8,7);
     for(uint8_t i=0;i<ACTION_COUNT;++i) {
         const int y=30+i*23;
         if(i==action_cursor){gfx_SetColor(2);gfx_FillRectangle(12,y-4,296,20);gfx_SetColor(13);gfx_Rectangle(12,y-4,296,20);}
-        gfx_SetTextFGColor(i==action_cursor?255:13);
+        gfx_SetTextFGColor(i==action_cursor?PICO_WHITE:PICO_LAVENDER);
         gfx_PrintStringXY(ACTIONS[i],22,y);
     }
     if(new_project_armed) {
-        gfx_SetTextFGColor(224);gfx_PrintStringXY("Press 2ND again to confirm NEW PROJECT",12,218);
+        gfx_SetTextFGColor(PICO_RED);gfx_PrintStringXY("Press 2ND again to confirm NEW PROJECT",12,218);
     } else {
-        gfx_SetTextFGColor(255);gfx_PrintStringXY("Up/Down  2ND choose  MODE/GRAPH back",12,218);
+        gfx_SetTextFGColor(PICO_WHITE);gfx_PrintStringXY("Up/Down  2ND choose  MODE/GRAPH back",12,218);
     }
     gfx_SwapDraw();
 }
@@ -972,18 +993,18 @@ void draw_actions() {
 void draw_properties() {
     gfx_FillScreen(0);
     const uint8_t id=property_id(),rot=property_rotation(),flags=property_game_flags();
-    gfx_SetTextFGColor(255);gfx_PrintStringXY("PROPERTIES",8,7);
+    gfx_SetTextFGColor(PICO_WHITE);gfx_PrintStringXY("PROPERTIES",8,7);
     gfx_SetTextFGColor(13);
     gfx_PrintStringXY(property_target==PROP_ENTITY?"Placed entity":property_target==PROP_TILE?"Placed tile":"Next placement",8,22);
     draw_panel(16,45,288,126,1,5);
     if(id) draw_piece(id,30,72,rot);
-    gfx_SetTextFGColor(255);
+    gfx_SetTextFGColor(PICO_WHITE);
     const char *name=logical_name(id);
     if(name) gfx_PrintStringXY(name,80,55);
     else gfx_PrintStringXY(category_name(category_of(id)),80,55);
     gfx_SetTextFGColor(13);gfx_PrintStringXY("ID",80,72);gfx_SetTextXY(100,72);gfx_PrintUInt(id,3);
-    gfx_PrintStringXY("Rotation",80,90);gfx_SetTextXY(145,90);gfx_PrintUInt(rot*90,3);gfx_PrintChar(176);
-    gfx_SetTextFGColor(255);
+    gfx_PrintStringXY("Rotation",80,90);gfx_SetTextXY(145,90);gfx_PrintUInt(rot*90,3);gfx_PrintString(" deg");
+    gfx_SetTextFGColor(PICO_WHITE);
     if(id==20||id==64) {
         gfx_PrintStringXY("Contains strawberry:",80,110);
         gfx_PrintStringXY((flags&1)?"NO":"YES",232,110);
@@ -999,7 +1020,7 @@ void draw_properties() {
     } else {
         gfx_PrintStringXY("No extra gameplay options",80,110);
     }
-    gfx_SetTextFGColor(255);
+    gfx_SetTextFGColor(PICO_WHITE);
     gfx_PrintStringXY("Left/Right or WINDOW rotate",16,188);
     gfx_PrintStringXY("MODE/STAT back",16,204);
     gfx_SwapDraw();
@@ -1007,10 +1028,10 @@ void draw_properties() {
 
 void draw_help() {
     gfx_FillScreen(0);
-    gfx_SetTextFGColor(255);gfx_PrintStringXY("CELEDIT HELP",8,7);
+    gfx_SetTextFGColor(PICO_WHITE);gfx_PrintStringXY("CELEDIT HELP",8,7);
     gfx_SetTextFGColor(13);
     gfx_PrintStringXY("Main editor",8,26);
-    gfx_SetTextFGColor(255);
+    gfx_SetTextFGColor(PICO_WHITE);
     gfx_PrintStringXY("Arrows move cursor. 2ND uses current tool.",8,40);
     gfx_PrintStringXY("ALPHA quick-erases. Y= cycles tools.",8,54);
     gfx_PrintStringXY("WINDOW rotates. ZOOM opens full palette.",8,68);
@@ -1018,7 +1039,7 @@ void draw_help() {
     gfx_PrintStringXY("GRAPH opens undo/export/project menu.",8,96);
     gfx_PrintStringXY("+/- changes rooms. CLEAR saves + exits.",8,110);
     gfx_SetTextFGColor(13);gfx_PrintStringXY("Gameplay",8,132);
-    gfx_SetTextFGColor(255);
+    gfx_SetTextFGColor(PICO_WHITE);
     gfx_PrintStringXY("Chest/fake wall berry options are editable.",8,146);
     gfx_PrintStringXY("Big chests can grant 2 or 3 dashes.",8,160);
     gfx_PrintStringXY("Silver keys/gates link by group 0-63.",8,174);
@@ -1036,8 +1057,12 @@ void details() {
     os_GetStringInput("DESCRIPTION",project.description,sizeof project.description);
     gfx_Begin();
     gfx_SetDrawBuffer();
-    gfx_SetTextTransparentColor(0);
+    gfx_SetPalette(imgpalette,sizeof imgpalette,0);
     gfx_SetPalette(mypalette,sizeof mypalette,0);
+    gfx_SetTransparentColor(PICO_BLACK);
+    gfx_SetTextFGColor(PICO_WHITE);
+    gfx_SetTextBGColor(PICO_BLACK);
+    gfx_SetTextTransparentColor(PICO_BLACK);
     set_notice("Project details updated");
 }
 
@@ -1195,8 +1220,12 @@ int main() {
     kb_SetMode(MODE_3_CONTINUOUS);
     gfx_Begin();
     gfx_SetDrawBuffer();
-    gfx_SetTextTransparentColor(0);
+    gfx_SetPalette(imgpalette,sizeof imgpalette,0);
     gfx_SetPalette(mypalette,sizeof mypalette,0);
+    gfx_SetTransparentColor(PICO_BLACK);
+    gfx_SetTextFGColor(PICO_WHITE);
+    gfx_SetTextBGColor(PICO_BLACK);
+    gfx_SetTextTransparentColor(PICO_BLACK);
     uint8_t old[8]={};
     bool running=true;
     while(running) {
