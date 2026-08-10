@@ -404,6 +404,32 @@ void draw_sprite(uint8_t id, int x, int y, uint8_t rotation = 0) {
     }
 }
 
+void draw_silver_key_texture(int x, int y, uint8_t rotation = 0) {
+    // Copy normal-key frame 8 and apply the same recolor used by the runtime.
+    // Atlas graphics use repeated-nibble palette slots: 0x99=orange,
+    // 0xAA=yellow, 0x55=dark gray, 0x66=light gray.
+    gfx_TempSprite(silver, 8, 8);
+    silver->width = 8;
+    silver->height = 8;
+    std::memcpy(silver->data, atlas_tiles[8]->data, 64);
+    for(uint8_t i = 0; i < 64; ++i) {
+        if(silver->data[i] == 0x99) silver->data[i] = 0x55;
+        else if(silver->data[i] == 0xAA) silver->data[i] = 0x66;
+    }
+
+    rotation &= 3;
+    if(!rotation) {
+        gfx_TransparentSprite(silver, x, y);
+        return;
+    }
+
+    gfx_TempSprite(rotated, 8, 8);
+    if(rotation == 1) gfx_RotateSpriteC(silver, rotated);
+    else if(rotation == 2) gfx_RotateSpriteHalf(silver, rotated);
+    else gfx_RotateSpriteCC(silver, rotated);
+    gfx_TransparentSprite(rotated, x, y);
+}
+
 void rotate_offset(int dx, int dy, uint8_t rotation, int &rx, int &ry) {
     switch(rotation & 3) {
         case 1: rx = -dy; ry = dx; break;
@@ -435,12 +461,7 @@ void draw_2x2(uint8_t a, uint8_t b, uint8_t c, uint8_t d, int x, int y, uint8_t 
 
 void draw_piece(uint8_t id, int x, int y, uint8_t rotation = 0) {
     if(id == 130) {
-        gfx_SetColor(6);
-        gfx_FillRectangle(x, y, 4, 4);
-        gfx_FillRectangle(x + 3, y + 1, 5, 2);
-        gfx_FillRectangle(x + 6, y + 3, 2, 2);
-        gfx_SetColor(7);
-        gfx_SetPixel(x + 1, y + 1);
+        draw_silver_key_texture(x, y, rotation);
         return;
     }
     if(id == 131) {

@@ -980,9 +980,10 @@ void SilverKey::update() {
 }
 
 void SilverKey::draw() {
-    // The silver key deliberately reuses the original animated chest-key art.
-    pal(9, 6);
-    pal(10, 7);
+    // Reuse the normal key's three animation frames with the user's exact
+    // silver recolor: orange -> dark gray and yellow -> light gray.
+    pal(9, 5);
+    pal(10, 6);
     spr_rot(sprite, x, y, custom_rotation, flip.x, flip.y);
     pal(9, 9);
     pal(10, 10);
