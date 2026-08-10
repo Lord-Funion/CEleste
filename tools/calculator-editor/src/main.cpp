@@ -26,10 +26,10 @@ constexpr uint8_t PALETTE[] = {
     16,40,41,42,44,56,57,58,60,61,62,63,73,74,75,76,77,78,79,
     88,89,90,91,92,93,94,95,103,104,105,106,107,108,109,110,111,
     121,122,123,124,125,126,127,
-    8,11,12,18,20,22,23,26,28,64,86,96,118,129
+    8,11,12,18,20,22,23,26,28,64,86,96,118,129,130,131
 };
 
-constexpr uint8_t ENTITY_IDS[] = {8,11,12,18,20,22,23,26,28,64,86,96,118,129};
+constexpr uint8_t ENTITY_IDS[] = {8,11,12,18,20,22,23,26,28,64,86,96,118,129,130,131};
 
 constexpr uint8_t TILE_MASK[128] = {
   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -169,6 +169,8 @@ const char *logical_name(uint8_t id) {
         case 96: return "Dash chest";
         case 118: return "Summit flag";
         case 129: return "Climb chest";
+        case 130: return "Silver key";
+        case 131: return "Silver gate";
         case 17: return "Spikes up";
         case 59: return "Spikes right";
         case 27: return "Spikes down";
@@ -357,6 +359,8 @@ uint8_t tile_color(uint8_t id) {
     if(id == 22) return 47;
     if(id == 18) return 192;
     if(id == 8) return 231;
+    if(id == 130) return 6;
+    if(id == 131) return 5;
     if(is_entity(id)) return 164;
     return static_cast<uint8_t>(80 + (id * 13) % 80);
 }
@@ -409,6 +413,26 @@ void draw_2x2(uint8_t a, uint8_t b, uint8_t c, uint8_t d, int x, int y, uint8_t 
 }
 
 void draw_piece(uint8_t id, int x, int y, uint8_t rotation = 0) {
+    if(id == 130) {
+        gfx_SetColor(6);
+        gfx_FillRectangle(x, y, 4, 4);
+        gfx_FillRectangle(x + 3, y + 1, 5, 2);
+        gfx_FillRectangle(x + 6, y + 3, 2, 2);
+        gfx_SetColor(7);
+        gfx_SetPixel(x + 1, y + 1);
+        return;
+    }
+    if(id == 131) {
+        gfx_SetColor(5); gfx_FillRectangle(x, y, 8, 8);
+        gfx_SetColor(6);
+        if(rotation & 1) {
+            gfx_FillRectangle(x, y + 1, 8, 2); gfx_FillRectangle(x, y + 5, 8, 2);
+        } else {
+            gfx_FillRectangle(x + 1, y, 2, 8); gfx_FillRectangle(x + 5, y, 2, 8);
+        }
+        gfx_SetColor(7); gfx_FillRectangle(x + 3, y + 3, 2, 2);
+        return;
+    }
     if(id == 129) {
         draw_sprite(20, x, y, rotation);
         gfx_SetColor(11);
@@ -755,6 +779,24 @@ void toggle_property_option() {
     }
 }
 
+void adjust_property_link(int delta) {
+    const uint8_t id=property_id();
+    if(id!=130&&id!=131) {
+        set_notice("Only silver keys/gates have links");
+        return;
+    }
+    if(property_target==PROP_TILE) return;
+    if(property_target==PROP_ENTITY&&property_entity>=0) {
+        push_undo();
+        EditEntity &e=project.rooms[room_index].entities[property_entity];
+        const uint8_t link=static_cast<uint8_t>((int(gameplay_flags(e.flags))+delta+64)&63);
+        e.flags=with_rotation(link,rotation_from_flags(e.flags));
+    } else {
+        placement_flags=static_cast<uint8_t>((int(placement_flags)+delta+64)&63);
+    }
+    set_notice("Silver link changed");
+}
+
 void draw_panel(int x,int y,int w,int h,uint8_t fill=1,uint8_t border=13) {
     gfx_SetColor(fill);gfx_FillRectangle(x,y,w,h);
     gfx_SetColor(border);gfx_Rectangle(x,y,w,h);
@@ -788,6 +830,9 @@ void draw_selected_info() {
     } else if(selected_id==96) {
         gfx_PrintStringXY("Dashes",190,108);
         gfx_PrintStringXY((placement_flags&2)?"3":"2",238,108);
+    } else if(selected_id==130||selected_id==131) {
+        gfx_PrintStringXY("Link",190,108);
+        gfx_SetTextXY(232,108); gfx_PrintUInt(placement_flags&63,2);
     }
     gfx_SetTextFGColor(13);
     gfx_PrintStringXY("STAT: properties",152,132);
@@ -947,6 +992,10 @@ void draw_properties() {
         gfx_PrintStringXY("Dash upgrade:",80,110);
         gfx_PrintStringXY((flags&2)?"3 dashes":"2 dashes",184,110);
         gfx_PrintStringXY("2ND toggles 2 / 3",80,128);
+    } else if(id==130||id==131) {
+        gfx_PrintStringXY("Link group:",80,110);
+        gfx_SetTextXY(170,110); gfx_PrintUInt(flags&63,2);
+        gfx_PrintStringXY("+/- changes linked gate group",80,128);
     } else {
         gfx_PrintStringXY("No extra gameplay options",80,110);
     }
@@ -972,8 +1021,9 @@ void draw_help() {
     gfx_SetTextFGColor(255);
     gfx_PrintStringXY("Chest/fake wall berry options are editable.",8,146);
     gfx_PrintStringXY("Big chests can grant 2 or 3 dashes.",8,160);
-    gfx_PrintStringXY("All pieces keep real 0/90/180/270 rotation.",8,174);
-    gfx_PrintStringXY("Rooms complete by climbing through the top.",8,188);
+    gfx_PrintStringXY("Silver keys/gates link by group 0-63.",8,174);
+    gfx_PrintStringXY("All pieces keep real 0/90/180/270 rotation.",8,188);
+    gfx_PrintStringXY("Rooms complete by climbing through the top.",8,202);
     gfx_PrintStringXY("MODE or Y= returns",8,216);
     gfx_SwapDraw();
 }
@@ -1210,6 +1260,8 @@ int main() {
             if(p(7,kb_Left))set_property_rotation((rot+3)&3);
             if(p(7,kb_Right)||p(3,kb_Window))set_property_rotation((rot+1)&3);
             if(p(1,kb_2nd))toggle_property_option();
+            if(p(6,kb_Add))adjust_property_link(1);
+            if(p(6,kb_Sub))adjust_property_link(-1);
             if(p(1,kb_Mode)||p(4,kb_Stat))view=EDITOR;
         } else if(view==HELP_VIEW) {
             if(p(1,kb_Mode)||p(3,kb_Yequ)||p(1,kb_2nd))view=EDITOR;
