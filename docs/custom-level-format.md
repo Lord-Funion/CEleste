@@ -100,8 +100,10 @@ Supported gameplay IDs include:
 | 96 | Big/dash-upgrade chest |
 | 118 | Summit flag |
 | 129 | Climb Chest (unlocks MATH wall-grab/climbing with stamina) |
+| 130 | Silver Key (linked gate key) |
+| 131 | Silver Gate (solid 8×8 linked gate block) |
 
-Multi-sprite entities remain one logical record. For example, one type-64 record renders the complete fake wall and one type-96 record renders the complete big chest.
+Multi-sprite entities remain one logical record. For example, one type-64 record renders the complete fake wall and one type-96 record renders the complete big chest. Silver gates are intentionally single-cell records so multiple type-131 entities with the same link group can be stacked into doors, portcullises, walls, or arbitrary keyed barriers.
 
 ### Entity flags and rotation
 
@@ -114,15 +116,29 @@ Rotation is decoded as `(flags >> 6) & 3`, using the same 0/90/180/270° values 
 
 Gameplay options currently used:
 
-| Entity | Gameplay bit | Meaning when set |
+| Entity | Gameplay bits | Meaning |
 |---|---:|---|
-| Locked chest (`20`) | 0 (`0x01`) | Empty chest; do not spawn a strawberry |
-| Fake wall (`64`) | 0 (`0x01`) | Empty wall; do not spawn a strawberry |
-| Big chest (`96`) | 1 (`0x02`) | Upgrade to three dashes instead of two |
+| Locked chest (`20`) | 0 (`0x01`) | When set, the chest is empty and does not spawn a strawberry |
+| Fake wall (`64`) | 0 (`0x01`) | When set, the wall is empty and does not spawn a strawberry |
+| Big chest (`96`) | 1 (`0x02`) | When set, upgrade to three dashes instead of two |
+| Silver Key (`130`) | 0–5 (`0x3F`) | Link group `0–63` unlocked when the key is collected |
+| Silver Gate (`131`) | 0–5 (`0x3F`) | Link group `0–63`; disappears when that group is unlocked |
 
-For example, a locked chest rotated 90° with its normal strawberry behavior uses flags `0x40`. An empty locked chest rotated 90° uses `0x41`.
+For example, a locked chest rotated 90° with its normal strawberry behavior uses flags `0x40`. An empty locked chest rotated 90° uses `0x41`. A Silver Gate in link group 12 rotated 90° uses flags `0x4C`.
 
-The runtime masks rotation bits away before reading gameplay options, so rotating a chest does not change whether it requires a key or contains a strawberry.
+The runtime masks rotation bits away before reading gameplay options, so rotating a chest does not change whether it requires a key or contains a strawberry, and rotating a silver key/gate does not change its link group.
+
+### Silver key/gate linking
+
+Silver linking is level-wide rather than room-local:
+
+- collecting a Silver Key unlocks its six-bit link group for the remainder of the active custom level;
+- every Silver Gate with the same link group disappears, including gates in other rooms;
+- a collected Silver Key stays collected through room deaths/restarts;
+- an unlocked link remains unlocked while changing rooms, but resets when a new custom level is loaded;
+- multiple Silver Keys may target the same group, and any number of Silver Gate blocks may share that group.
+
+This system is separate from the original yellow Key (`8`) and Locked Chest (`20`) mechanic.
 
 ## Gameplay semantics of rotation
 
@@ -131,6 +147,7 @@ All supported custom graphics can be rendered at the four quarter-turn orientati
 - Directional spike collision is rotated to match the rendered spike direction.
 - Locked chests retain key/chest behavior at every orientation.
 - Fake-wall strawberry options and big-chest dash-count options remain independent from orientation.
+- Silver Keys retain their link group at every orientation. Silver Gate graphics rotate while the same link group continues to control collision/unlocking.
 - Other objects keep their ordinary gameplay semantics unless the runtime explicitly defines a directional semantic for that object. Rotation can therefore be graphical for objects whose original mechanics are not orientation-dependent.
 - The Climb Chest (`129`) is a custom power-up entity. Touching it unlocks modern-Celeste-style wall grabbing for the remainder of that custom level: hold `MATH` against a non-ice wall, use Up/Down to climb, and manage the 110-point stamina pool. Ground contact restores stamina.
 
@@ -167,5 +184,7 @@ Current implementations reject or report:
 - more than 48 gameplay entities per room;
 - compound pieces outside room bounds or overlapping another logical gameplay footprint;
 - malformed nested pack entries or unexplained trailing bytes.
+
+Studio additionally warns when a Silver Key link has no Silver Gate or a Silver Gate link has no Silver Key in the same level.
 
 The Studio exporter uses a conservative 65,000-byte AppVar payload limit.
