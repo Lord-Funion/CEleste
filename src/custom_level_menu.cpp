@@ -70,6 +70,16 @@ void show_results(int run_deaths, int run_minutes, int run_seconds) {
     screen = Screen::Results;
 }
 
+void show() {
+    custom_levels::scan();
+    selected = 0;
+    menu_open = true;
+    old_mode = kb_IsDown(kb_KeyMode);
+    old_up = kb_IsDown(kb_KeyUp);
+    old_down = kb_IsDown(kb_KeyDown);
+    old_play = kb_IsDown(kb_Key2nd) || kb_IsDown(kb_KeyAlpha);
+}
+
 bool update() {
     const bool mode = kb_IsDown(kb_KeyMode);
     const bool up = kb_IsDown(kb_KeyUp);
@@ -114,7 +124,7 @@ bool update() {
     }
     if (screen == Screen::Closed) {
         if (!mode_pressed) return false;
-        show_browser(); return true;
+        show(); return true;
     }
     if (mode_pressed) { screen = Screen::Closed; return true; }
     const uint8_t count = custom_levels::catalog_size();

@@ -86,7 +86,7 @@ uint8_t scan() {
 
 uint8_t catalog_size() { return count; }
 const CatalogEntry *catalog_entry(uint8_t index) { return index < count ? &catalog[index] : nullptr; }
-const CatalogEntry *active_entry() { return is_active && active_catalog < count ? &catalog[active_catalog] : nullptr; }
+const CatalogEntry *current_catalog_entry() { return is_active && active_catalog < count ? &catalog[active_catalog] : nullptr; }
 
 bool load(uint8_t catalog_index, uint16_t pack_level_index) {
     if (catalog_index >= count) { set_error("catalog index out of range"); return false; }
@@ -113,12 +113,9 @@ bool load(uint8_t catalog_index, uint16_t pack_level_index) {
     error_text[0] = '\0'; return true;
 }
 
-bool restart_entry() {
-    if(!is_active || active_catalog >= count) {
-        set_error("no active custom level");
-        return false;
-    }
-    return load(active_catalog, 0);
+bool reload() {
+    if (!is_active || active_catalog >= count) return false;
+    return load(active_catalog, active_pack_level);
 }
 
 void unload() { if (is_active) { ++content_generation; if (!content_generation) content_generation = 1; } is_active = false; current_room = 0; active_pack_level = 0; std::memset(unlocked_gate_links, 0, sizeof unlocked_gate_links); }

@@ -123,7 +123,6 @@ uint8_t palette_cursor = 0;
 uint8_t rooms_cursor = 0;
 uint8_t action_cursor = 0;
 bool new_project_armed = false;
-bool delete_room_armed = false;
 bool dirty = false;
 
 enum PropertyTarget : uint8_t { PROP_PLACEMENT, PROP_TILE, PROP_ENTITY };
@@ -299,10 +298,6 @@ void save_draft() {
     }
     const bool ok = ti_Write(&project, sizeof project, 1, h) == 1;
     ti_Close(h);
-    if(!ok) {
-        set_notice("Draft save failed");
-        return;
-    }
     dirty = false;
     set_notice("Draft saved");
 }
@@ -336,6 +331,7 @@ void load_draft() {
 }
 
 void push_undo() {
+    dirty = true;
     if(undo_count == HISTORY_SIZE) {
         std::memmove(undo_stack, undo_stack + 1, sizeof(RoomSnapshot) * (HISTORY_SIZE - 1));
         --undo_count;
@@ -911,6 +907,7 @@ void draw_editor() {
     gfx_FillScreen(0);
     gfx_SetTextFGColor(PICO_WHITE);
     gfx_PrintStringXY("CELEDIT",8,5);
+    if(dirty) { gfx_SetTextFGColor(PICO_YELLOW); gfx_PrintStringXY("*",54,5); }
     gfx_SetTextFGColor(13);
     gfx_PrintStringXY("Studio-style",62,5);
     gfx_SetTextFGColor(dirty ? PICO_YELLOW : PICO_GREEN);
@@ -942,7 +939,7 @@ void draw_editor() {
     gfx_SetTextFGColor(PICO_YELLOW);
     gfx_PrintStringXY(notice,8,218);
     gfx_SetTextFGColor(PICO_WHITE);
-    gfx_PrintStringXY("+/- room  CLEAR saves+quits",8,230);
+    gfx_PrintStringXY("MODE save  DEL undo  ENTER redo",8,230);
     gfx_SwapDraw();
 }
 
@@ -1332,6 +1329,7 @@ int main() {
                 if(project.room_count>1){room_index=static_cast<uint8_t>((room_index+project.room_count-1)%project.room_count);rooms_cursor=room_index;set_notice("Previous room");}
                 else set_notice("Only one room");
             }
+            if(p(1,kb_Mode))save_draft();
             if(p(1,kb_Del))undo();
             if(p(6,kb_Enter))redo();
             if(p(6,kb_Clear)){save_draft();running=false;}

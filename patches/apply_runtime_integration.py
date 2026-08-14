@@ -43,7 +43,9 @@ replace("src/classic.cpp", "    if(practice_mode && level_index() != 30) {\n", "
 classic = (ROOT / "src/classic.cpp").read_text()
 if "source_collected(" not in classic and "bool has_fruit = custom_levels::active()" not in classic:
     replace("src/classic.cpp", "    bool has_fruit = got_fruit[level_index()];\n", "    bool has_fruit = custom_levels::active() ? false : got_fruit[level_index()];\n")
-replace("src/classic.cpp", "    if(frames == 0 and level_index() < 30) {\n", "    if(frames == 0 and (custom_levels::active() or level_index() < 30)) {\n")
+classic = (ROOT / "src/classic.cpp").read_text()
+if "    if(frames == 0 and !custom_results and (custom_levels::active() or level_index() < 30)) {\n" not in classic:
+    replace("src/classic.cpp", "    if(frames == 0 and level_index() < 30) {\n", "    if(frames == 0 and (custom_levels::active() or level_index() < 30)) {\n")
 insert_after("src/classic.cpp", "    update_title_sequences();\n", "\n    if(custom_level_menu::update()) {\n        profiler_end(update);\n        return;\n    }\n")
 classic = (ROOT / "src/classic.cpp").read_text()
 if "custom_level_menu::draw();" not in classic:

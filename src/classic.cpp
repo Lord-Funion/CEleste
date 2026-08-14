@@ -83,6 +83,9 @@ int unlimited_dash_sequence_step = 0;
 int unlimited_dash_sequence_timer = 0;
 int test_mode_notice_timer = 0;
 int covenant_notice_timer = 0;
+bool custom_results = false;
+bool custom_results_input_ready = false;
+int custom_results_delay = 0;
 
 constexpr int TOTAL_STRAWBERRIES = 18;
 
@@ -135,6 +138,12 @@ void title_screen() {
     test_mode = false;
     start_game = false;
     start_game_flash = 0;
+    custom_results = false;
+    custom_results_input_ready = false;
+    custom_results_delay = 0;
+    pause_player = false;
+    will_restart = false;
+    delay_restart = 0;
     //music(40,0,7);
 
     load_room(7, 3);
@@ -157,6 +166,12 @@ void begin_game() {
     pause_player = false;
     music_timer = 0;
     start_game = false;
+    custom_results = false;
+    custom_results_input_ready = false;
+    custom_results_delay = 0;
+    pause_player = false;
+    will_restart = false;
+    delay_restart = 0;
     //music(0,0,7);
     load_room(0, 0);
 }
@@ -1308,7 +1323,13 @@ void RoomTitle::draw() {
 
         rectfill(24, 58, 104, 70, 0);
 
-        if(room.x == 3 and room.y == 1) {
+        if(custom_levels::active()) {
+            const clevel::Level *level = custom_levels::level();
+            print("room", 42, 62, 7);
+            print_int(custom_levels::room_index() + 1);
+            print("/");
+            print_int(level ? level->room_count : 1);
+        } else if(room.x == 3 and room.y == 1) {
             print("old site", 48, 62, 7);
         } else if(level_index() == 30) {
             print("summit", 52, 62, 7);
@@ -1548,6 +1569,38 @@ void restart_room() {
     delay_restart = 15;
 }
 
+void show_custom_results() {
+    custom_results = true;
+    custom_results_input_ready = false;
+    custom_results_delay = 12;
+    pause_player = true;
+    will_restart = false;
+    delay_restart = 0;
+    shake = 0;
+}
+
+void replay_custom_level() {
+    custom_results = false;
+    custom_results_input_ready = false;
+    pause_player = false;
+    deaths = 0;
+    climb_enabled = false;
+    climb_stamina = CLIMB_STAMINA_MAX;
+    if(custom_levels::reload()) {
+        begin_game();
+    } else {
+        title_screen();
+        custom_level_menu::show();
+    }
+}
+
+void return_to_custom_browser() {
+    custom_results = false;
+    custom_results_input_ready = false;
+    pause_player = false;
+    title_screen();
+    custom_level_menu::show();
+}
 
 void next_room() {
     if(custom_levels::active()) {
@@ -1559,7 +1612,7 @@ void next_room() {
             climb_stamina = CLIMB_STAMINA_MAX;
             load_room(0, 0);
         } else {
-            custom_level_menu::show_results(deaths, minutes, seconds);
+            show_custom_results();
         }
         return;
     }
@@ -1661,11 +1714,33 @@ void load_room(uint8_t x, uint8_t y) {
 void _update() {
     profiler_add(update);
     frames = ((frames + 1) % 30);
-    if(frames == 0 and (custom_levels::active() or level_index() < 30)) {
+    if(frames == 0 and !custom_results and (custom_levels::active() or level_index() < 30)) {
         seconds = ((seconds + 1) % 60);
         if(seconds == 0) {
             minutes += 1;
         }
+    }
+
+    if(custom_results) {
+        const bool second = kb_IsDown(kb_Key2nd);
+        const bool alpha = kb_IsDown(kb_KeyAlpha);
+        const bool mode = kb_IsDown(kb_KeyMode);
+        if(custom_results_delay > 0) {
+            --custom_results_delay;
+        } else if(!custom_results_input_ready) {
+            if(!second && !alpha && !mode) custom_results_input_ready = true;
+        } else if(second) {
+            return_to_custom_browser();
+        } else if(alpha) {
+            replay_custom_level();
+        } else if(mode) {
+            custom_results = false;
+            custom_results_input_ready = false;
+            pause_player = false;
+            title_screen();
+        }
+        profiler_end(update);
+        return;
     }
 
     if(music_timer > 0) {
@@ -1915,6 +1990,28 @@ void _draw() {
             rectfill(128 - diff, 0, 128, 128, 0);
         }
     }
+    if(custom_results) {
+        const custom_levels::CatalogEntry *entry = custom_levels::current_catalog_entry();
+        const clevel::Level *level = custom_levels::level();
+        char title[23] = "CUSTOM LEVEL";
+        const char *source_title = (entry && entry->kind == clevel::KIND_PACK) ? entry->title : (level ? level->title : nullptr);
+        if(source_title && source_title[0]) {
+            std::strncpy(title, source_title, sizeof title - 1);
+            title[sizeof title - 1] = '\0';
+        }
+        rectfill(17, 12, 111, 114, 0);
+        print(entry && entry->kind == clevel::KIND_PACK ? "PACK COMPLETE" : "LEVEL COMPLETE", 34, 18, 11);
+        print(title, 21, 29, 7);
+        spr(118, 60, 40);
+        print("time", 31, 58, 6);
+        draw_time(49, 56);
+        print("deaths:", 38, 69, 6);
+        print_int(deaths);
+        print("2nd: levels", 37, 87, 7);
+        print("alpha: replay", 33, 96, 6);
+        print("mode: title", 37, 105, 6);
+    }
+
     custom_level_menu::draw();
     profiler_end(draw);
 }
