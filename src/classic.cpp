@@ -124,7 +124,6 @@ void _init(FILE *save) {
 }
 
 void title_screen() {
-    custom_level_menu::close();
     custom_levels::unload();
     for(bool &i: got_fruit) {
         i = false;

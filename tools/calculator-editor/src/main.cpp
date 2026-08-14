@@ -123,6 +123,7 @@ uint8_t palette_cursor = 0;
 uint8_t rooms_cursor = 0;
 uint8_t action_cursor = 0;
 bool new_project_armed = false;
+bool delete_room_armed = false;
 bool dirty = false;
 
 enum PropertyTarget : uint8_t { PROP_PLACEMENT, PROP_TILE, PROP_ENTITY };
@@ -298,6 +299,10 @@ void save_draft() {
     }
     const bool ok = ti_Write(&project, sizeof project, 1, h) == 1;
     ti_Close(h);
+    if(!ok) {
+        set_notice("Draft save failed");
+        return;
+    }
     dirty = false;
     set_notice("Draft saved");
 }
