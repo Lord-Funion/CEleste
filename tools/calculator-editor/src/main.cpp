@@ -14,6 +14,9 @@ namespace {
 constexpr uint8_t MAX_ROOMS = 16;
 constexpr uint8_t MAX_ENTITIES = 48;
 constexpr uint8_t HISTORY_SIZE = 12;
+constexpr std::size_t MAX_METADATA_SIZE = 63 + 31 + 127;
+constexpr std::size_t MAX_ENCODED_LEVEL_SIZE = clevel::HEADER_SIZE + MAX_METADATA_SIZE +
+    MAX_ROOMS * (16 + 512 + clevel::ROTATION_PLANE_BYTES + MAX_ENTITIES * 4);
 constexpr uint8_t ROT_SHIFT = clevel::ENTITY_ROTATION_SHIFT;
 constexpr uint8_t ROT_MASK = clevel::ENTITY_ROTATION_MASK;
 constexpr uint8_t GAME_MASK = clevel::ENTITY_FLAG_MASK;
@@ -120,6 +123,7 @@ uint8_t palette_cursor = 0;
 uint8_t rooms_cursor = 0;
 uint8_t action_cursor = 0;
 bool new_project_armed = false;
+bool delete_room_armed = false;
 bool dirty = false;
 
 enum PropertyTarget : uint8_t { PROP_PLACEMENT, PROP_TILE, PROP_ENTITY };
@@ -240,6 +244,8 @@ void new_project() {
     selected_id = 37;
     placement_rotation = placement_flags = 0;
     tool = PENCIL;
+    delete_room_armed = false;
+    dirty = true;
 }
 
 void add_entity(EditRoom &r, uint8_t type, uint8_t x, uint8_t y, uint8_t flags) {
@@ -291,8 +297,12 @@ void save_draft() {
         set_notice("Draft save failed");
         return;
     }
-    ti_Write(&project, sizeof project, 1, h);
+    const bool ok = ti_Write(&project, sizeof project, 1, h) == 1;
     ti_Close(h);
+    if(!ok) {
+        set_notice("Draft save failed");
+        return;
+    }
     dirty = false;
     set_notice("Draft saved");
 }
@@ -307,6 +317,7 @@ void load_draft() {
     if(size == sizeof project && ti_Read(&project, sizeof project, 1, h) == 1 &&
        project.room_count > 0 && project.room_count <= MAX_ROOMS) {
         ti_Close(h);
+        dirty = false;
         return;
     }
     if(size == sizeof(LegacyProject)) {
@@ -697,16 +708,19 @@ bool apply_tool() {
     if(tool==ERASER) {
         push_undo();
         if(!erase_at(cursor_x,cursor_y)) --undo_count;
+        else dirty = true;
         return true;
     }
     if(tool==FILL) {
         push_undo();
         if(!flood_fill(cursor_x,cursor_y)) --undo_count;
+        else dirty = true;
         return true;
     }
     push_undo();
     if(selected_id==0) {
         if(!erase_at(cursor_x,cursor_y)) --undo_count;
+        else dirty = true;
         return true;
     }
     if(selected_id==1) {
@@ -715,11 +729,13 @@ bool apply_tool() {
         const uint16_t p=cursor_y*16+cursor_x;
         r.tiles[p]=0;r.rotations[p]=0;
         r.spawn_x=cursor_x;r.spawn_y=cursor_y;
+        dirty = true;
         set_notice("Spawn moved");
         return true;
     }
     if(is_entity(selected_id)) {
         if(!place_entity(selected_id)) --undo_count;
+        else dirty = true;
         return true;
     }
     const uint16_t p=cursor_y*16+cursor_x;
@@ -727,6 +743,7 @@ bool apply_tool() {
     if(ei>=0) remove_entity(r,static_cast<uint8_t>(ei));
     r.tiles[p]=selected_id;
     r.rotations[p]=placement_rotation;
+    dirty = true;
     return true;
 }
 
@@ -798,9 +815,11 @@ void set_property_rotation(uint8_t rot) {
         push_undo();
         r.entities[property_entity]=after;
         clear_terrain_under(r,after);
+        dirty = true;
     } else if(property_target==PROP_TILE) {
         push_undo();
         project.rooms[room_index].rotations[property_y*16+property_x]=rot;
+        dirty = true;
     } else {
         placement_rotation=rot;
     }
@@ -820,6 +839,7 @@ void toggle_property_option() {
         if(id==20||id==64) g^=1;
         else g^=2;
         e.flags=with_rotation(g,rotation_from_flags(e.flags));
+        dirty = true;
     } else {
         if(id==20||id==64) placement_flags^=1;
         else placement_flags^=2;
@@ -838,6 +858,7 @@ void adjust_property_link(int delta) {
         EditEntity &e=project.rooms[room_index].entities[property_entity];
         const uint8_t link=static_cast<uint8_t>((int(gameplay_flags(e.flags))+delta+64)&63);
         e.flags=with_rotation(link,rotation_from_flags(e.flags));
+        dirty = true;
     } else {
         placement_flags=static_cast<uint8_t>((int(placement_flags)+delta+64)&63);
     }
@@ -894,6 +915,8 @@ void draw_editor() {
     if(dirty) { gfx_SetTextFGColor(PICO_YELLOW); gfx_PrintStringXY("*",54,5); }
     gfx_SetTextFGColor(13);
     gfx_PrintStringXY("Studio-style",62,5);
+    gfx_SetTextFGColor(dirty ? PICO_YELLOW : PICO_GREEN);
+    gfx_PrintStringXY(dirty ? "UNSAVED" : "SAVED", 250, 5);
     gfx_SetTextFGColor(PICO_WHITE);
     gfx_PrintStringXY(project.title,8,18);
     gfx_SetTextXY(255,18);gfx_PrintString("R");gfx_PrintUInt(room_index+1,2);gfx_PrintChar('/');gfx_PrintUInt(project.room_count,2);
@@ -993,7 +1016,12 @@ void draw_rooms() {
     }
     gfx_SetTextFGColor(PICO_WHITE);
     gfx_PrintStringXY("2ND open  ENTER add  ALPHA duplicate",8,198);
-    gfx_PrintStringXY("DEL delete  +/- move  MODE/TRACE back",8,214);
+    if(delete_room_armed) {
+        gfx_SetTextFGColor(PICO_RED);
+        gfx_PrintStringXY("Press DEL again to delete this room",8,214);
+    } else {
+        gfx_PrintStringXY("DEL delete  +/- move  MODE/TRACE back",8,214);
+    }
     gfx_SwapDraw();
 }
 
@@ -1090,6 +1118,7 @@ void details() {
     gfx_SetTextFGColor(PICO_WHITE);
     gfx_SetTextBGColor(PICO_BLACK);
     gfx_SetTextTransparentColor(PICO_BLACK);
+    dirty = true;
     set_notice("Project details updated");
 }
 
@@ -1097,6 +1126,8 @@ void add_room() {
     if(project.room_count>=MAX_ROOMS){set_notice("16 room calculator limit");return;}
     init_room(project.rooms[project.room_count]);
     room_index=rooms_cursor=project.room_count++;
+    delete_room_armed = false;
+    dirty = true;
     set_notice("Room added");
 }
 
@@ -1107,15 +1138,24 @@ void duplicate_room() {
     project.rooms[src+1]=project.rooms[src];
     ++project.room_count;
     room_index=rooms_cursor=src+1;
+    delete_room_armed = false;
+    dirty = true;
     set_notice("Room duplicated");
 }
 
 void delete_room() {
     if(project.room_count==1){set_notice("A level needs one room");return;}
+    if(!delete_room_armed) {
+        delete_room_armed = true;
+        set_notice("Press DEL again to delete room");
+        return;
+    }
     for(uint8_t i=rooms_cursor;i+1<project.room_count;++i) project.rooms[i]=project.rooms[i+1];
     --project.room_count;
     if(rooms_cursor>=project.room_count) rooms_cursor=project.room_count-1;
     room_index=rooms_cursor;
+    delete_room_armed = false;
+    dirty = true;
     set_notice("Room deleted");
 }
 
@@ -1126,6 +1166,8 @@ void move_room(int direction) {
     project.rooms[rooms_cursor]=project.rooms[next];
     project.rooms[next]=tmp;
     rooms_cursor=room_index=next;
+    delete_room_armed = false;
+    dirty = true;
     set_notice("Room reordered");
 }
 
@@ -1194,7 +1236,9 @@ std::size_t encode(uint8_t *out,std::size_t cap) {
 }
 
 void export_level() {
-    static uint8_t payload[26000];
+    // The exact worst case is much smaller than the old 26 KB scratch buffer.
+    // Keeping this tight leaves more RAM available for the draft and AppVar.
+    static uint8_t payload[MAX_ENCODED_LEVEL_SIZE];
     const std::size_t size=encode(payload,sizeof payload);
     if(!size){set_notice("Level too large to export");return;}
     char name[9]="CL000000";
@@ -1203,13 +1247,23 @@ void export_level() {
     for(uint8_t i=0;i<6;++i)name[7-i]=hex[(id>>(i*4))&15];
     uint8_t h=ti_Open(name,"w");
     if(!h||ti_Write(payload,1,size,h)!=size) {
-        if(h)ti_Close(h);
+        if(h) {
+            ti_Close(h);
+            ti_Delete(name);
+        }
         set_notice("Export failed");
         return;
     }
-    ti_SetArchiveStatus(true,h);
     ti_Close(h);
-    set_notice("Exported CELV AppVar");
+    // Moving a variable to archive can start an OS garbage-collection cycle.
+    // CELEDIT draws with graphx and older builds did not install the required
+    // GC callbacks, so that prompt could reset the program and clear RAM.
+    // CEleste and TI Connect both accept a RAM AppVar; users may archive it
+    // from Memory Management after safely leaving the editor.
+    char message[32]="Exported ";
+    std::strcat(message,name);
+    std::strcat(message," in RAM");
+    set_notice(message);
 }
 
 void activate_action() {
@@ -1265,11 +1319,11 @@ int main() {
             if(p(7,kb_Up)&&cursor_y)--cursor_y;
             if(p(7,kb_Down)&&cursor_y<15)++cursor_y;
             if(p(1,kb_2nd))apply_tool();
-            if(p(2,kb_Alpha)){push_undo();if(!erase_at(cursor_x,cursor_y))--undo_count;}
+            if(p(2,kb_Alpha)){push_undo();if(!erase_at(cursor_x,cursor_y))--undo_count;else dirty=true;}
             if(p(1,kb_Yequ))cycle_tool();
             if(p(1,kb_Window))rotate_placement();
             if(p(1,kb_Zoom)){view=PALETTE_VIEW;palette_cursor=0;}
-            if(p(1,kb_Trace)){view=ROOMS_VIEW;rooms_cursor=room_index;}
+            if(p(1,kb_Trace)){view=ROOMS_VIEW;rooms_cursor=room_index;delete_room_armed=false;}
             if(p(1,kb_Graph)){view=ACTIONS_VIEW;action_cursor=0;new_project_armed=false;}
             if(p(4,kb_Stat))open_properties();
             if(p(6,kb_Add)){
@@ -1299,17 +1353,17 @@ int main() {
             }
             if(p(1,kb_Mode)||p(1,kb_Zoom))view=EDITOR;
         } else if(view==ROOMS_VIEW) {
-            if(p(7,kb_Left)&&rooms_cursor)--rooms_cursor;
-            if(p(7,kb_Right)&&rooms_cursor+1<project.room_count)++rooms_cursor;
-            if(p(7,kb_Up)&&rooms_cursor>=4)rooms_cursor-=4;
-            if(p(7,kb_Down)&&rooms_cursor+4<project.room_count)rooms_cursor+=4;
-            if(p(1,kb_2nd)){room_index=rooms_cursor;view=EDITOR;set_notice("Room opened");}
+            if(p(7,kb_Left)&&rooms_cursor){--rooms_cursor;delete_room_armed=false;}
+            if(p(7,kb_Right)&&rooms_cursor+1<project.room_count){++rooms_cursor;delete_room_armed=false;}
+            if(p(7,kb_Up)&&rooms_cursor>=4){rooms_cursor-=4;delete_room_armed=false;}
+            if(p(7,kb_Down)&&rooms_cursor+4<project.room_count){rooms_cursor+=4;delete_room_armed=false;}
+            if(p(1,kb_2nd)){room_index=rooms_cursor;view=EDITOR;delete_room_armed=false;set_notice("Room opened");}
             if(p(6,kb_Enter))add_room();
             if(p(2,kb_Alpha))duplicate_room();
             if(p(1,kb_Del))delete_room();
             if(p(6,kb_Add))move_room(1);
             if(p(6,kb_Sub))move_room(-1);
-            if(p(1,kb_Mode)||p(1,kb_Trace))view=EDITOR;
+            if(p(1,kb_Mode)||p(1,kb_Trace)){view=EDITOR;delete_room_armed=false;}
         } else if(view==ACTIONS_VIEW) {
             if(p(7,kb_Up)&&action_cursor){--action_cursor;new_project_armed=false;}
             if(p(7,kb_Down)&&action_cursor+1<ACTION_COUNT){++action_cursor;new_project_armed=false;}

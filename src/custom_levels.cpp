@@ -115,7 +115,9 @@ bool load(uint8_t catalog_index, uint16_t pack_level_index) {
 
 bool reload() {
     if (!is_active || active_catalog >= count) return false;
-    return load(active_catalog, active_pack_level);
+    // Replay means the whole selected entry. For packs, start again at level 1
+    // instead of replaying only the final level that happened to be active.
+    return load(active_catalog, 0);
 }
 
 void unload() { if (is_active) { ++content_generation; if (!content_generation) content_generation = 1; } is_active = false; current_room = 0; active_pack_level = 0; std::memset(unlocked_gate_links, 0, sizeof unlocked_gate_links); }

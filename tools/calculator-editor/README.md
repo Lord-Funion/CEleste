@@ -23,6 +23,9 @@ Other main controls:
 - `Enter` — redo
 - `Clear` — save the draft and exit
 
+The header always shows whether the draft is `SAVED` or `UNSAVED`, so it is
+clear when the project menu's **Save draft** action is still needed.
+
 ## Palette
 
 `Zoom` opens a full-screen visual palette instead of forcing authors to cycle blindly through IDs. The palette contains the original Celeste Classic standalone map pieces plus complete logical gameplay objects.
@@ -76,13 +79,16 @@ Keys, locked chests, strawberries, fake walls, big chests, balloons, springs, fa
 - deleting rooms
 - reordering rooms
 
+Deleting a room requires a second `Del` press, preventing a single accidental
+key press from discarding a room while browsing thumbnails.
+
 The calculator editor supports up to **16 rooms** per level and **48 gameplay entities per room**. Rooms complete by climbing through the top edge; the summit flag is optional and is not the normal exit.
 
 ## Project menu
 
 `Graph` opens a proper actions menu containing undo, redo, project details, save, export, new-project, help, and exit actions. Project details include level title, author, and description. CELV v2 export preserves the project metadata, terrain rotation plane, entity rotation/options, and room order.
 
-The editable draft is stored in the `CELEDITS` AppVar. Existing drafts from the previous 8-room tile/entity layout are migrated into the new entity-based project model when possible. Exported playable data uses a `CL......` AppVar; transferring it to a computer with TI Connect CE creates an `.8xv` file.
+The editable draft is stored in the `CELEDITS` AppVar. Existing drafts from the previous 8-room tile/entity layout are migrated into the new entity-based project model when possible. Exported playable data uses a `CL......` AppVar in RAM; CEleste can play it immediately, and transferring it to a computer with TI Connect CE creates an `.8xv` file. Leaving it in RAM avoids an unsafe OS garbage-collection prompt while CELEDIT is drawing. If desired, archive the exported variable from Memory Management after exiting the editor.
 
 ## Studio vs. CELEDIT
 

@@ -152,6 +152,17 @@ void begin_game() {
     frames = 0;
     seconds = 0;
     minutes = 0;
+    deaths = 0;
+    max_dash = 1;
+    climb_enabled = false;
+    climb_stamina = CLIMB_STAMINA_MAX;
+    new_bg = false;
+    flash_bg = false;
+    freeze = 0;
+    shake = 0;
+    will_restart = false;
+    delay_restart = 0;
+    pause_player = false;
     music_timer = 0;
     start_game = false;
     custom_results = false;
