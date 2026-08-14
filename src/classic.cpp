@@ -121,6 +121,7 @@ void _init(FILE *save) {
 }
 
 void title_screen() {
+    custom_level_menu::close();
     custom_levels::unload();
     for(bool &i: got_fruit) {
         i = false;
@@ -143,6 +144,17 @@ void begin_game() {
     frames = 0;
     seconds = 0;
     minutes = 0;
+    deaths = 0;
+    max_dash = 1;
+    climb_enabled = false;
+    climb_stamina = CLIMB_STAMINA_MAX;
+    new_bg = false;
+    flash_bg = false;
+    freeze = 0;
+    shake = 0;
+    will_restart = false;
+    delay_restart = 0;
+    pause_player = false;
     music_timer = 0;
     start_game = false;
     //music(0,0,7);
@@ -1547,7 +1559,7 @@ void next_room() {
             climb_stamina = CLIMB_STAMINA_MAX;
             load_room(0, 0);
         } else {
-            title_screen();
+            custom_level_menu::show_results(deaths, minutes, seconds);
         }
         return;
     }

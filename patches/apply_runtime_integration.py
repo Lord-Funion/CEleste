@@ -26,7 +26,10 @@ replace("src/emu.cpp", "        int y;\n        gfx_rletsprite_t *sprite;\n    }
 
 insert_after("src/classic.cpp", '#include "practice.h"\n', '#include "custom_levels.h"\n#include "custom_level_menu.h"\n')
 insert_after("src/classic.cpp", "void _init(FILE *save) {\n", "    custom_levels::initialize();\n    custom_level_menu::initialize();\n")
-insert_after("src/classic.cpp", "void title_screen() {\n", "    custom_levels::unload();\n")
+classic = (ROOT / "src/classic.cpp").read_text()
+title_body = classic.split("void title_screen() {\n", 1)[1].split("\n}", 1)[0]
+if "custom_levels::unload();" not in title_body:
+    insert_after("src/classic.cpp", "void title_screen() {\n", "    custom_levels::unload();\n")
 replace("src/classic.cpp", "bool is_title() {\n    return level_index() == 31;\n}\n", "bool is_title() {\n    return !custom_levels::active() && level_index() == 31;\n}\n")
 replace("src/classic.cpp", "    if(y < -4 and level_index() < 30) {\n", "    if(y < -4 and (custom_levels::active() or level_index() < 30)) {\n")
 classic = (ROOT / "src/classic.cpp").read_text()
