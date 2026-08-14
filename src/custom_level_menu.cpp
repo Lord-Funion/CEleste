@@ -21,6 +21,16 @@ void initialize() {
 
 bool open() { return menu_open; }
 
+void show() {
+    custom_levels::scan();
+    selected = 0;
+    menu_open = true;
+    old_mode = kb_IsDown(kb_KeyMode);
+    old_up = kb_IsDown(kb_KeyUp);
+    old_down = kb_IsDown(kb_KeyDown);
+    old_play = kb_IsDown(kb_Key2nd) || kb_IsDown(kb_KeyAlpha);
+}
+
 bool update() {
     const bool mode = kb_IsDown(kb_KeyMode);
     const bool up = kb_IsDown(kb_KeyUp);
@@ -37,7 +47,7 @@ bool update() {
     }
     if (!menu_open) {
         if (!mode_pressed) return false;
-        custom_levels::scan(); selected = 0; menu_open = true; return true;
+        show(); return true;
     }
     if (mode_pressed) { menu_open = false; return true; }
     const uint8_t count = custom_levels::catalog_size();
